@@ -10,7 +10,7 @@ then
 elif [[ "$type" == "pion" ]]
 then
     mkdir pion
-    scp ${user}@lxplus.cern.ch:/eos/user/m/mswiatlo/images/v7/*.root ./pion/
+    scp ${user}@lxplus.cern.ch:/eos/user/m/mswiatlo/images/v10_wJets_wTrack/*.root ./pion/
 else
     echo "Type ${type} not understood."
 fi

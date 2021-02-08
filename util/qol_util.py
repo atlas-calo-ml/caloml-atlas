@@ -50,13 +50,25 @@ class PlotStyle:
             self.canv  = rt.kWhite
             self.text  = rt.kBlack
             self.curve = rt.kBlue
-        
+            
+            self.text_plt = 'xkcd:black'
+            self.canv_plt = 'xkcd:white'
+            self.main_plt = 'xkcd:black'
+            self.grid_plt = '0.65'
+            self.curve_plt = 'xkcd:blue'
+            
         elif(mode == 'dark'):
             self.main  = rt.TColor.GetColor(52,165,218)
             self.canv  = rt.TColor.GetColor(34,34,34)
             self.text  = rt.kWhite
-            self.curve = rt.TColor.GetColor(231,114,61) 
-        
+            self.curve = rt.TColor.GetColor(231,114,61)
+            
+            self.text_plt = 'xkcd:white'
+            self.canv_plt = '#222222'
+            self.main_plt = 'xkcd:black'
+            self.grid_plt = '0.65'
+            self.curve_plt = '#34a5da'
+            
     def SetStyle(self):
         rt.gStyle.SetAxisColor(self.main,'xyz')
         rt.gStyle.SetGridColor(self.main)
