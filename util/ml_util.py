@@ -7,9 +7,7 @@ from keras import utils
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import atlas_mpl_style as ampl
 import scipy.ndimage as ndi
-ampl.use_atlas_style()
 
 #define a dict for cell meta data
 cell_meta = {

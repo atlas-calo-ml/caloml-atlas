@@ -1,3 +1,5 @@
+#TODO: Consolidate functions. There's lots of redundancy here (e.g. roc_plot() is just a generic plot function).
+
 import matplotlib.font_manager
 import os
 import numpy as np
@@ -5,66 +7,74 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from sklearn.metrics import roc_curve, auc
-
-import atlas_mpl_style as ampl
-ampl.use_atlas_style()
+from util import qol_util as qu
 
 # set plotsytle choices here
 params = {'legend.fontsize': 13,
           'axes.labelsize': 18}
 plt.rcParams.update(params)
 
-ampl.set_color_cycle('Oceanic',10)
-
 def histogramOverlay(frames, data, labels, xlabel, ylabel, figfile = '', 
                         x_min = 0, x_max = 2200, xbins = 22, normed = True, y_log = False,
                         atlas_x = -1, atlas_y = -1, simulation = False,
-                        textlist = []):
+                        textlist = [],
+                        ps = qu.PlotStyle('dark')):
     xbin = np.arange(x_min, x_max, (x_max - x_min) / xbins)
 
     plt.cla()
     plt.clf()
-    fig = plt.figure()
-    fig.patch.set_facecolor('white')
+    
+    fig,ax = plt.subplots(1,1)
+    #fig.patch.set_facecolor(ps.canv_plt)
 
     zorder_start = -1 * len(data) # hack to get axes on top
     for i, datum in enumerate(data):
-        plt.hist(frames[i][datum], bins = xbin, density = normed, 
+        ax.hist(frames[i][datum], bins = xbin, density = normed, 
             alpha = 0.5, label=labels[i], zorder=zorder_start + i)
     
-    plt.xlim(x_min, x_max)
-    if y_log:
-        plt.yscale('log')
-
-    ampl.set_xlabel(xlabel)
-    ampl.set_ylabel(ylabel)
-
-    if atlas_x >= 0 and atlas_y >= 0:
-        ampl.draw_atlas_label(atlas_x, atlas_y, simulation = simulation, fontsize = 18)
-
-    drawLabels(fig, atlas_x, atlas_y, simulation, textlist)
+    ax.set_xlim(x_min,x_max)
     
-    fig.axes[0].zorder = len(data)+1 #hack to keep the tick marks up
-    plt.legend()
+    if y_log: ax.set_yscale('log')
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    # TODO: find a way to replace this
+    #if atlas_x >= 0 and atlas_y >= 0:
+        #ampl.draw_atlas_label(atlas_x, atlas_y, simulation = simulation, fontsize = 18)
+
+    drawLabels(fig, atlas_x, atlas_y, simulation, textlist) #TODO: fix for fig,ax implementation
+    
+    ax.set_zorder = len(data)+1 #hack to keep the tick marks up
+    ax.legend()
     if figfile != '':
-        plt.savefig(figfile)
+        plt.savefig(figfile, transparent=True, facecolor=ps.canv_plt)
     plt.show()
 
-def lineOverlay(xcenter, lines, labels, xlabel, ylabel, figfile = '',
-                    x_min = 0.1, x_max = 1000, x_log = True, y_min = 0, y_max = 2, y_log = False,
+def multiplot_common(ax, xcenter, lines, labels, xlabel, ylabel,
+                    x_min = None, x_max = None, 
+                    y_min = None, y_max = None,
+                    x_log = False, y_log = False,
                     linestyles=[], colorgrouping=-1,
                     extra_lines = [],
                     atlas_x=-1, atlas_y=-1, simulation=False,
-                    textlist=[]):
-    plt.cla()
-    plt.clf()
+                    textlist=[],
+                    title = '',
+                    ps = qu.PlotStyle('dark')):
+    '''
+    Creates a set of plots, on a common carrier "xcenter".
+    Draws the plots on a provided axis.
+    '''
+    
+    if(x_min == None): x_min = np.min(xcenter)
+    if(x_max == None): x_max = np.max(xcenter)
+        
+    if(y_min == None): y_min = np.minimum(0.,np.min(np.column_stack(lines)))
+    if(y_max == None): y_max = 1.25 * np.max(np.column_stack(lines))
 
-    fig = plt.figure()
-    fig.patch.set_facecolor('white')
     for extra_line in extra_lines:
-        plt.plot(extra_line[0], extra_line[1], linestyle='--', color='black')
+        ax.plot(extra_line[0], extra_line[1], linestyle='--', color='black')
 
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    colors = ps.colors
 
     for i, line in enumerate(lines):
         if len(linestyles) > 0:
@@ -72,46 +82,46 @@ def lineOverlay(xcenter, lines, labels, xlabel, ylabel, figfile = '',
         else:
             linestyle = 'solid'
         if colorgrouping > 0:
-            color = colors[int(np.floor(i / colorgrouping))]
+            color = colors[int(np.floor(i  / colorgrouping))]
         else:
-            color = colors[i]
-        plt.plot(xcenter, line, label = labels[i], linestyle=linestyle,color=color)
+            color = colors[i % len(colors)]
+        ax.plot(xcenter, line, label = labels[i], linestyle=linestyle,color=color)
 
-    if x_log:
-        plt.xscale('log')
-    if y_log:
-        plt.yscale('log')
-
-    plt.xlim(x_min, x_max)
-    plt.ylim(y_min, y_max)
-    ampl.set_xlabel(xlabel)
-    ampl.set_ylabel(ylabel)
-
-    drawLabels(fig, atlas_x, atlas_y, simulation, textlist)
-
-    plt.legend()
-    if figfile != '':
-        plt.savefig(figfile)
-    plt.show()
-
-def roc_plot(xlist, ylist, figfile = '',
-             xlabel='False positive rate',
-             ylabel='True positive rate',
-             x_min = 0, x_max = 1.1, x_log = False,
-             y_min = 0, y_max = 1.1, y_log = False,
-             linestyles=[], colorgrouping=-1,
-             extra_lines=[], labels=[],
-             atlas_x=-1, atlas_y=-1, simulation=False,
-             textlist=[], title=''):
-    plt.cla()
-    plt.clf()
+    if x_log: ax.set_xscale('log')
+    if y_log: ax.set_yscale('log')
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
     
-    fig = plt.figure()
-    fig.patch.set_facecolor('white')
+    ps.SetStylePlt(ax)
+    
+    #drawLabels(fig, atlas_x, atlas_y, simulation, textlist)
+
+    legend = ax.legend(facecolor=ps.canv_plt)
+    for leg_text in legend.get_texts(): leg_text.set_color(ps.text_plt)
+    return
+
+def multiplot(ax, xlist, ylist, 
+              xlabel='False positive rate', ylabel='True positive rate', 
+              x_min = 0, x_max = 1.1, x_log = False,
+              y_min = 0, y_max = 1.1, y_log = False, 
+              linestyles=[], colorgrouping=-1, 
+              extra_lines=[], labels=[], 
+              atlas_x=-1, atlas_y=-1, simulation=False,  
+              textlist=[], title='', 
+              ps = qu.PlotStyle('dark')):
+    
+    '''
+    Creates a set of plots, from series of x and y values (does not use a common carrier).
+    Draws the plots on a provided axis.
+    '''
     for extra_line in extra_lines:
-        plt.plot(extra_line[0], extra_line[1], linestyle='--', color='black')
+        ax.plot(extra_line[0], extra_line[1], linestyle='--', color=ps.main_plt)
         
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    colors = ps.colors
+
     for i, (x,y) in enumerate(zip(xlist,ylist)):
         if len(linestyles) > 0:
             linestyle = linestyles[i]
@@ -124,61 +134,88 @@ def roc_plot(xlist, ylist, figfile = '',
         label = None
         if len(labels) > 0:
             label = labels[i]
-        plt.plot(x, y, label = label, linestyle=linestyle, color=color)
+        ax.plot(x, y, label = label, linestyle=linestyle, color=color)
         
-    if x_log:
-        plt.xscale('log')
-    if y_log:
-        plt.yscale('log')
+    if x_log: ax.set_xscale('log')
+    if y_log: ax.set_yscale('log')
         
-    plt.title(title)
-    plt.xlim(x_min, x_max)
-    plt.ylim(y_min, y_max)
-    ampl.set_xlabel(xlabel)
-    ampl.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
     
-    plt.legend()
-
-    drawLabels(fig, atlas_x, atlas_y, simulation, textlist)
+    ps.SetStylePlt(ax)
     
-    if figfile != '':
-        plt.savefig(figfile)
-    plt.show()
+    legend = ax.legend(facecolor=ps.canv_plt)
+    for leg_text in legend.get_texts(): leg_text.set_color(ps.text_plt)
+        
+    #drawLabels(fig, atlas_x, atlas_y, simulation, textlist)
+    return
     
+def roc_plot(ax, xlist, ylist,
+             xlabel='False positive rate',
+             ylabel='True positive rate',
+             x_min = 0, x_max = 1.1, x_log = False,
+             y_min = 0, y_max = 1.1, y_log = False,
+             linestyles=[], colorgrouping=-1,
+             extra_lines=[[[0, 1], [0, 1]]], labels=[],
+             atlas_x=-1, atlas_y=-1, simulation=False,
+             textlist=[], title='',
+             ps = qu.PlotStyle('dark')):
+    '''
+    Shortcut for making a ROC curve.
+    '''
+    multiplot(ax, xlist, ylist,
+              xlabel=xlabel,
+              ylabel=ylabel,
+              x_min=x_min, x_max=x_max, x_log=x_log,
+              y_min=y_min, y_max=y_max, y_log=y_log,
+              linestyles=linestyles, colorgrouping=colorgrouping,
+              extra_lines=extra_lines, labels=labels,
+              atlas_x=atlas_x, atlas_y=atlas_y, simulation=simulation,
+              textlist=textlist, title=title,
+              ps=ps
+    )
+    return
+    
+# Plot multiple data series, with x bins as integer array (0,...N-1)
 def make_plot(items, figfile = '',
               xlabel = '', ylabel = '',
               x_log = False, y_log = False,
               labels = [], title = '',
-             ):
+              ps = qu.PlotStyle('dark')):
     plt.cla()
     plt.clf()
     
-    fig = plt.figure()
-    fig.patch.set_facecolor('white')
+    fig,ax = plt.subplots(1,1)
+    colors = ps.colors
+    #fig.patch.set_facecolor('white')
     for i, item in enumerate(items):
         label = None
         if len(labels) >= i:
             label = labels[i]
-        plt.plot(item, label=label)
+        color = colors[i%len(colors)]
+        ax.plot(item, label=label,color=color)
         
-    if x_log:
-        plt.xscale('log')
-    if y_log:
-        plt.yscale('log')
+    if x_log: ax.set_xscale('log')
+    if y_log: ax.set_yscale('log')
     
-    plt.title(title)
-    ampl.set_xlabel(xlabel)
-    ampl.set_ylabel(ylabel)
-    
-    plt.legend()
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    ax.legend()
     if figfile != '':
-        plt.savefig(figfile)
+        plt.savefig(figfile,transparent=True, facecolor=ps.canv_plt)
     plt.show()
     
 def drawLabels(fig, atlas_x=-1, atlas_y=-1, simulation=False,
                textlist=[]):
-    if atlas_x >= 0 and atlas_y >= 0:
-        ampl.draw_atlas_label(atlas_x, atlas_y, simulation=simulation, fontsize=18)
+    
+    # TODO: find a non-ampl way to do this
+#     if atlas_x >= 0 and atlas_y >= 0:
+#         ampl.draw_atlas_label(atlas_x, atlas_y, simulation=simulation, fontsize=18)
 
     for textdict in textlist:
         fig.axes[0].text(
@@ -271,8 +308,12 @@ def rocScan(varlist, scan_targets, labels, ylabels, data, plotpath='',
                 plt.yscale('log')
             plt.xlim(x_min, x_max)
             plt.ylim(y_min, y_max)
-            ampl.set_xlabel(x_label)
-            ampl.set_ylabel(y_label)
+            
+            plt.x_label(x_label)
+            plt.y_label(y_label)
+            
+            #ampl.set_xlabel(x_label)
+            #ampl.set_ylabel(y_label)
             plt.legend()
 
             drawLabels(fig, atlas_x, atlas_y, simulation, textlist)
