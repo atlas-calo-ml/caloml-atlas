@@ -11,23 +11,17 @@ import itertools
 # def EnergyMappingInverse(x, b=0.):
 #     return np.sign(x) * (np.exp(np.abs(x)) - b)
 
-# @jit
-# def EnergyMapping(x, b=1.):
-#     result = np.zeros(len(x))
-    
-#     for i in range(len(x)):
-#         if(x[i] <= b): result[i] = x[i]
-#         else: result[i] = np.log(x[i] - b + 1.) + b
-#     return result
 
-# @jit
-# def EnergyMappingInverse(x, b=1.):
-#     result = np.zeros(len(x))
-    
-#     for i in range(len(x)):
-#         if(x[i] <= b): result[i] = x[i]
-#         else: result[i] = np.exp(x[i] - b) + b - 1.
-#     return result
+class LogMapping:
+    def __init__(self,b=1.,m=0.):
+        self.b = b
+        self.m = m # unused
+        
+    def Forward(self,x):
+        return np.sign(x) * np.log(np.abs(x) + self.b)
+            
+    def Inverse(self,x):
+        return np.sign(x) * (np.exp(np.abs(x)) - self.b)
 
 class LinLogMapping:
     def __init__(self,b=1.,m=1.):
@@ -40,7 +34,7 @@ class LinLogMapping:
     
         for i in range(len(x)):
             if(x[i] <= self.b): result[i] = self.m * x[i]
-            else: result[i] = np.log(self.m * (x[i] - self.b) + 1.) + self.b
+            else: result[i] = np.log(self.m * (x[i] - self.b) + 1.) + self.m * self.b
         return result
 
     #@jit
@@ -51,9 +45,8 @@ class LinLogMapping:
             if(x[i] <= mb): result[i] = x[i] / self.m
             else: result[i] = (np.exp(x[i] - mb) - 1.) / self.m + self.b
         return result
-    
 
-def MapStabilityTest(mapping_func, b_vals=[0.,.1,.5,1.,1.0e14], m_vals=[1.], x=np.linspace(0.001,4.,1000), ps=qu.PlotStyle('dark'),savedir=''):
+def MapStabilityTest(mapping_func, b_vals=[0.,.1,.5,1.,1.0e14], m_vals=[1.], x=np.linspace(0.001,4.,1000), ps=qu.PlotStyle('dark'),savedir='',legend_size=-1):
     
     mb_combos = list(itertools.product(b_vals,m_vals))
     
@@ -70,6 +63,8 @@ def MapStabilityTest(mapping_func, b_vals=[0.,.1,.5,1.,1.0e14], m_vals=[1.], x=n
     
     pu.multiplot_common(ax[0], x, forward, forward_labels, y_min=y_min, y_max=y_max, xlabel='x', ylabel='y', title='Forward Mapping', ps=ps)
     pu.multiplot_common(ax[1], x, reverse, reverse_labels, y_min=y_min, y_max=y_max, xlabel='x', ylabel='y', title='Reverse Mapping', ps=ps)
+    
+    if(legend_size > 0):plt.rc('legend',fontsize=legend_size)
     plt.show()
     
     savename = 'mapping_test.png'
