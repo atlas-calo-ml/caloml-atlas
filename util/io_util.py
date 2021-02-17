@@ -1,0 +1,79 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from numba import jit
+from util import plot_util  as pu
+from util import qol_util as qu
+import itertools
+
+# def EnergyMapping(x, b=0.):
+#     return np.sign(x) * np.log(np.abs(x) + b)
+
+# def EnergyMappingInverse(x, b=0.):
+#     return np.sign(x) * (np.exp(np.abs(x)) - b)
+
+# @jit
+# def EnergyMapping(x, b=1.):
+#     result = np.zeros(len(x))
+    
+#     for i in range(len(x)):
+#         if(x[i] <= b): result[i] = x[i]
+#         else: result[i] = np.log(x[i] - b + 1.) + b
+#     return result
+
+# @jit
+# def EnergyMappingInverse(x, b=1.):
+#     result = np.zeros(len(x))
+    
+#     for i in range(len(x)):
+#         if(x[i] <= b): result[i] = x[i]
+#         else: result[i] = np.exp(x[i] - b) + b - 1.
+#     return result
+
+class LinLogMapping:
+    def __init__(self,b=1.,m=1.):
+        self.b = b
+        self.m = m
+    
+    #@jit
+    def Forward(self, x):
+        result = np.zeros(len(x),dtype=np.dtype('f8'))
+    
+        for i in range(len(x)):
+            if(x[i] <= self.b): result[i] = self.m * x[i]
+            else: result[i] = np.log(self.m * (x[i] - self.b) + 1.) + self.b
+        return result
+
+    #@jit
+    def Inverse(self, x):
+        result = np.zeros(len(x),dtype=np.dtype('f8'))
+        mb = self.m * self.b
+        for i in range(len(x)):
+            if(x[i] <= mb): result[i] = x[i] / self.m
+            else: result[i] = (np.exp(x[i] - mb) - 1.) / self.m + self.b
+        return result
+    
+
+def MapStabilityTest(mapping_func, b_vals=[0.,.1,.5,1.,1.0e14], m_vals=[1.], x=np.linspace(0.001,4.,1000), ps=qu.PlotStyle('dark'),savedir=''):
+    
+    mb_combos = list(itertools.product(b_vals,m_vals))
+    
+    forward_labels = ['f(x), b={:.1e}, m={:.1e}'.format(mb[0],mb[1])    for mb in mb_combos]
+    reverse_labels = ['g(f(x)), b={:.1e}, m={:.1e}'.format(mb[0],mb[1]) for mb in mb_combos]
+
+    forward = [mapping_func(b,m).Forward(x) for (b,m) in mb_combos]
+    reverse = [mapping_func(mb_combos[i][0],mb_combos[i][1]).Inverse(forward[i]) for i in range(len(forward))]
+    
+    #reverse = [mapping_func(b,m).Inverse(forward) for (b,m) in mb_combos]
+
+    fig,ax = plt.subplots(1,2,figsize=(16,6))
+    y_min, y_max = (-4.,4.)
+    
+    pu.multiplot_common(ax[0], x, forward, forward_labels, y_min=y_min, y_max=y_max, xlabel='x', ylabel='y', title='Forward Mapping', ps=ps)
+    pu.multiplot_common(ax[1], x, reverse, reverse_labels, y_min=y_min, y_max=y_max, xlabel='x', ylabel='y', title='Reverse Mapping', ps=ps)
+    plt.show()
+    
+    savename = 'mapping_test.png'
+    if(savedir != ''):
+        savename = savedir + '/' + savename
+    fig.savefig(savename,transparent=True)
+    return

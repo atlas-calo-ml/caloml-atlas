@@ -71,24 +71,24 @@ class PlotStyle:
             
         # list of matplotlib colors
         self.colors = [
-            'xkcd:medium purple',
-            'xkcd:indigo',
-            'xkcd:dark teal',
+            'xkcd:medium purple', # first pass thrpugh rainbow
+            'xkcd:periwinkle blue', 
             'xkcd:true blue',
-            'xkcd:periwinkle blue',
-            'xkcd:aqua blue',
             'xkcd:electric lime',
             'xkcd:kelly green',
+            'xkcd:tangerine',
+            'xkcd:bordeaux',
+            'xkcd:bright red',
+            'xkcd:indigo', # second pass through rainbow
+            'xkcd:dark teal',
+            'xkcd:aqua blue',
             'xkcd:dark olive green',
             'xkcd:macaroni and cheese',
-            'xkcd:tangerine',
             'xkcd:burnt orange',
-            'xkcd:bordeaux',
             'xkcd:brick red',
-            'xkcd:bright red',
             'xkcd:salmon'
-            ]
-        self.colors.reverse() # put the reds first -- purple can be comparitively hard to see on dark background
+         ]
+        #self.colors.reverse() # put the reds first -- purple can be comparitively hard to see on dark background
         
         # list of matplotlib linestyles
         self.linestyles = [
@@ -139,9 +139,11 @@ class PlotStyle:
 
 
 # Setting a histogram's line and fill color in one go
-def SetColor(hist, color, alpha = 0.5):
-    hist.SetLineColor(color)
+def SetColor(hist, color, alpha = 1., style=0):
     hist.SetFillColorAlpha(color, alpha)
+    hist.SetLineColor(color)
+    if(style != 0): hist.SetFillStyle(style)
+    return
 
 def RN():
     return str(uuid.uuid4())
