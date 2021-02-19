@@ -50,8 +50,12 @@ def MapStabilityTest(mapping_func, b_vals=[0.,.1,.5,1.,1.0e14], m_vals=[1.], x=n
     
     mb_combos = list(itertools.product(b_vals,m_vals))
     
-    forward_labels = ['f(x), b={:.1e}, m={:.1e}'.format(mb[0],mb[1])    for mb in mb_combos]
-    reverse_labels = ['g(f(x)), b={:.1e}, m={:.1e}'.format(mb[0],mb[1]) for mb in mb_combos]
+    if(m_vals == [1.]):
+        forward_labels = ['f(x), b={:.1e}'.format(mb[0])    for mb in mb_combos]
+        reverse_labels = ['g(f(x)), b={:.1e}'.format(mb[0]) for mb in mb_combos]
+    else:
+        forward_labels = ['f(x), b={:.1e}, m={:.1e}'.format(mb[0],mb[1])    for mb in mb_combos]
+        reverse_labels = ['g(f(x)), b={:.1e}, m={:.1e}'.format(mb[0],mb[1]) for mb in mb_combos]
 
     forward = [mapping_func(b,m).Forward(x) for (b,m) in mb_combos]
     reverse = [mapping_func(mb_combos[i][0],mb_combos[i][1]).Inverse(forward[i]) for i in range(len(forward))]

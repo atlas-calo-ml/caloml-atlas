@@ -55,8 +55,26 @@ def resnet(strategy, channels=6, lr=5e-5):
             eta_input    = Input(shape =(1,), name='eta')
             
             # Rescale all the input images, so that their dimensions now match.
+            # Note that we make sure to re-normalize the images so that we preserve their energies.
+            integrals_old = [tf.math.reduce_sum(x,axis=[1,2]) for x in inputs]
             scaled_inputs = [tf.image.resize(x,input_shape,name='scaled_input'+str(i)) for i,x in enumerate(inputs)]
+            integrals_new = [tf.math.reduce_sum(x,axis=[1,2]) for x in scaled_inputs]
             
+            # normalizations are ratio of integrals (for each image in the batch)
+            normalizations = [tf.math.divide(integrals_old[i],integrals_new[i]) for i in range(channels)]
+            # now fix the dimensions of normalizations, to properly broadcast. Dims should be (batch, eta, phi, channel),
+            # so we must insert 2 axes in the middle as we currently have (batch, channel).
+            # These new axes will be of size one, will be taken care of by broadcasting.
+            for i in range(channels):
+                normalizations[i] = tf.expand_dims(normalizations[i],axis=1) # call for 1st time
+                normalizations[i] = tf.expand_dims(normalizations[i],axis=1) # call a 2nd time
+
+            scaled_inputs2 = [tf.math.multiply(normalizations[i],scaled_inputs[i]) for i in range(channels)]
+
+            print('0:',integrals_old[0].shape)
+            print('a:',scaled_inputs[0].shape)
+            print('b:',scaled_inputs2[0].shape)
+
             # Now "stack" the images along the channels dimension.
             X = tf.concat(values=scaled_inputs, axis=3, name='concat')
             #print('In:',X.shape)
