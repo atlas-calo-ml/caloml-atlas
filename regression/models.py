@@ -71,10 +71,6 @@ def resnet(strategy, channels=6, lr=5e-5):
 
             scaled_inputs2 = [tf.math.multiply(normalizations[i],scaled_inputs[i]) for i in range(channels)]
 
-            print('0:',integrals_old[0].shape)
-            print('a:',scaled_inputs[0].shape)
-            print('b:',scaled_inputs2[0].shape)
-
             # Now "stack" the images along the channels dimension.
             X = tf.concat(values=scaled_inputs, axis=3, name='concat')
             #print('In:',X.shape)
