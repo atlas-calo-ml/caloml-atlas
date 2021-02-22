@@ -1,14 +1,13 @@
 import sys, os
 import ROOT as rt
 import numpy as np
-import pandas as pd
+import scipy.stats as spst
 import matplotlib.pyplot as plt
 
 path_prefix = os.getcwd() + '/../'
 if(path_prefix not in sys.path): sys.path.append(path_prefix)
 from util import plot_util as pu
 from util import qol_util  as qu
-
 
 def Median(values, counts, default = 1):
     nvar = len(values)
@@ -31,7 +30,7 @@ def EnergyPlot2D(e1, e2, title='title;x;y', nbins = [100,35], x_range = [0.,2000
     for i in range(len(e2)):
         hist.Fill(x_vals[i],y_vals[i])
         
-    # now we want to make a curve representing the medians/means in y
+    # now we want to make a curve representing the medians or means in y (median by default, despite variable names!)
     bin_centers_y = np.array([hist.GetYaxis().GetBinCenter(i+1) for i in range(nbins[1])])
     mean_vals = np.zeros(nbins[0])
     for i in range(nbins[0]):
@@ -52,13 +51,82 @@ def EnergyPlot2D(e1, e2, title='title;x;y', nbins = [100,35], x_range = [0.,2000
     curve.SetLineWidth(2)
     return curve, hist
 
+# For plotting the inter-quartile range for ratio of predicted energy to true energy, versus true energy
+# (Complements the EnergyPlot2D() output)
+def IqrPlot(e1, e2, title='title;x;y', nbins = 100, x_range = [0.,2000.], offset=False):
+    
+    # To compute the true IQR's, we will use lists of energy ratios for each truth energy bin,
+    # versus using the 2D histogram from EnergyPlot2D -- we don't want to bin in y, because that
+    # will affect the resolution of the IQR that we calculate.
+    n = len(e1)
+    if(offset): e2 = e2 + 1.
+    x_bins = np.linspace(*x_range,nbins)
+    y_lists = [[] for i in range(nbins)]
+    
+    # get the binned x_vals
+    x_vals = np.digitize(e2,x_bins) - 1 # subtracting one for the expected binning behaviour, e.g. with x_bins[0]=0 & x_bins[1]=1, x=.5 should go in bin[0]
+    
+    ratios = e1/e2
+    for i in range(n):
+        y_lists[int(x_vals[i])].append(ratios[i])
+    y_lists = [np.array(x) for x in y_lists]
+    
+    # Now calculate the IQR for each x bin.
+    iqr = [spst.iqr(x) for x in y_lists]
+        
+    # Now make the plot.     
+    # Scipy.stats.iqr gives nan for empty input,
+    # so we need to avoid these and leave the 
+    # corresponding bins empty.
+    hist = rt.TH1F(qu.RN(),title,nbins,*x_range)
+    for i in range(nbins):
+        val = iqr[i]
+        if(np.isnan(val)): continue
+        b = i+1
+        hist.SetBinContent(b,val)
+    return hist
+
+# For plotting the median ratio of predicted energy to true energy, versus true energy
+# (Complements the EnergyPlot2D() output)
+def MedianPlot(e1, e2, title='title;x;y', nbins = 100, x_range = [0.,2000.], offset=False):
+    
+    # To compute the true medians, we will use lists of energy ratios for each truth energy bin,
+    # versus using the 2D histogram from EnergyPlot2D -- we don't want to bin in y, because that
+    # will affect the resolution of the median that we calculate.
+    n = len(e1)
+    if(offset): e2 = e2 + 1.
+    x_bins = np.linspace(*x_range,nbins)
+    y_lists = [[] for i in range(nbins)]
+    
+    # get the binned x_vals
+    x_vals = np.digitize(e2,x_bins) - 1 # subtracting one for the expected binning behaviour, e.g. with x_bins[0]=0 & x_bins[1]=1, x=.5 should go in bin[0]
+    
+    ratios = e1/e2
+    for i in range(n):
+        y_lists[int(x_vals[i])].append(ratios[i])
+    y_lists = [np.array(x) for x in y_lists]
+    
+    # Now calculate the IQR for each x bin.
+    median = [np.median(x) for x in y_lists]
+        
+    # Now make the plot.     
+    # Scipy.stats.iqr gives nan for empty input,
+    # so we need to avoid these and leave the 
+    # corresponding bins empty.
+    hist = rt.TH1F(qu.RN(),title,nbins,*x_range)
+    for i in range(nbins):
+        val = median[i]
+        if(np.isnan(val)): continue
+        b = i+1
+        hist.SetBinContent(b,val)
+    return hist
 
 # Big plotting function. #TODO: Should we break this up into parts?
 def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotpath, extensions=['png'], plot_size=750, strat='pion', full=True, ps=qu.PlotStyle('dark')):
     
     ps.SetStyle()
     
-    # some ranges for the plots
+    # Some ranges for the plots -- these are hardcoded for now.
     if(strat == 'pion' or strat == 'pion_reweighted'):
         max_energy = 2000. # GeV
         max_energy_2d = max_energy
@@ -75,26 +143,38 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
         bins_2d = [50,125]
         offset_2d = True
     
+    # Dictionaries to keep track of all our histogram objects.
+    # Each entry will be a dictionary of hists.
+    # Outer key is data type (charged pion, neutral pion),
+    # inner key is data set (train, valid, all).
     
+    clusterE = {}                # reco energy
+    clusterE_calib = {}          # cluster_ENG_CALIB_TOT (true energy, as far as we're concerned)
+    clusterE_pred = {}           # predicted energy
+    clusterE_true = {}           # "truth" energy from the parton level (I think), not what we're after
     
-    # keep track of all our histograms
-    clusterE = {}
-    clusterE_calib = {}
-    clusterE_pred = {}
-    clusterE_true = {}
-    clusterE_ratio1 = {} # ratio of predicted cluster E to calibrated cluster E
-    clusterE_ratio2 = {} # ratio of reco cluster E to calibrated cluster E
-    clusterE_ratio2D = {} # 2D plot, ratio1 versus calibrated cluster E
-    clusterE_ratio2D_zoomed = {} # 2D plot, ratio1 versus calibrated cluster E, zoomed
+    clusterE_ratio1 = {}         # ratio1: E_pred / ENG_CALIB_TOT
+    clusterE_ratio2 = {}         # ratio2: E_reco / ENG_CALIB_TOT
+    clusterE_ratio2D = {}        # ratio1 vs. ENG_CALIB_TOT
+    clusterE_ratio2D_zoomed = {} # ratio1 vs. ENG_CALIB_TOT (Zoomed on left)
+    
+    ratio1_iqr = {}              # IQR, from ratio1
+    ratio2_iqr = {}              # IQR, from ratio2
+    ratio1_iqr_zoomed = {}              # IQR, from ratio1
+    ratio2_iqr_zoomed = {}              # IQR, from ratio2
+    
+    # histogram stacks
+    energy_stacks = {}
+    iqr_stacks = {}
+    iqr_stacks_zoomed = {}
 
-    # keep track of mean/median curves on 2D plots
+    # keep track of mean/median curves from the 2D plots (one set for each).
     mean_curves = {}
     mean_curves_zoomed = {}
 
     # keep track of our canvases, legends and histogram stacks
     canvs = {}
     legends = {}
-    stacks = {}
 
     key_conversions = {
         'pp':'#pi^{#pm}',
@@ -107,23 +187,34 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
         'all data': data_dfs
     }
 
-
     for key in train_dfs.keys(): # assuming all DataFrame dicts have the same keys
+        
+        # Initialize the inner dictionaries.
         clusterE[key] = {}
         clusterE_calib[key] = {}
         clusterE_pred[key] = {}    
         clusterE_true[key] = {}
+        
         clusterE_ratio1[key] = {}
         clusterE_ratio2[key] = {}
         clusterE_ratio2D[key] = {}
         clusterE_ratio2D_zoomed[key] = {}
     
+        ratio1_iqr[key] = {}
+        ratio2_iqr[key] = {}
+        ratio1_iqr_zoomed[key] = {}
+        ratio2_iqr_zoomed[key] = {}
+        
+        energy_stacks[key] = {}
+        iqr_stacks[key] = {}
+        iqr_stacks_zoomed[key] = {}
+
         mean_curves[key] = {}
         mean_curves_zoomed[key] = {}
     
         canvs[key] = {}
         legends[key] = {}
-        stacks[key] = {}
+        iqr_stacks[key] = {}
     
         for dkey, frame in dsets.items():
             key2 = '(' + key_conversions[key] + ', ' + dkey + ')'
@@ -134,12 +225,12 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
             clusterE_ratio1[key][dkey] = rt.TH1F(qu.RN(), 'E_{pred} / E_{calib}^{tot} ' + key2 + ';E_{pred}/E_{calib}^{tot};Count', 250,0.,10.)
             clusterE_ratio2[key][dkey] = rt.TH1F(qu.RN(), 'E / E_{calib}^{tot} ' + key2 + ';E_{reco}/E_{calib}^{tot]};Count', 250,0.,10.)
 
-            qu.SetColor(clusterE[key][dkey], rt.kViolet, alpha = 0.4)
+            qu.SetColor(clusterE[key][dkey], ps.main, alpha = 0.4)
             qu.SetColor(clusterE_calib[key][dkey], rt.kPink + 9, alpha = 0.4)
-            qu.SetColor(clusterE_pred[key][dkey], rt.kGreen, alpha = 0.4)        
+            qu.SetColor(clusterE_pred[key][dkey], ps.curve, alpha = 0.4)        
             qu.SetColor(clusterE_true[key][dkey], rt.kRed, alpha = 0.4)
-            qu.SetColor(clusterE_ratio1[key][dkey], rt.kViolet, alpha = 0.4)
-            qu.SetColor(clusterE_ratio2[key][dkey], rt.kGreen, alpha = 0.4)
+            qu.SetColor(clusterE_ratio1[key][dkey], ps.main, alpha = 0.4)
+            qu.SetColor(clusterE_ratio2[key][dkey], ps.curve, alpha = 0.4)
 
             meas   = frame[key]['clusterE'].to_numpy()
             calib  = frame[key]['cluster_ENG_CALIB_TOT'].to_numpy()
@@ -156,12 +247,12 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
                 clusterE_ratio1[key][dkey].Fill(ratio1[i])
                 clusterE_ratio2[key][dkey].Fill(ratio2[i])
             
-            # fill the histogram stacks
-            stacks[key][dkey] = rt.THStack(qu.RN(), clusterE_ratio1[key][dkey].GetTitle())
-            stacks[key][dkey].Add(clusterE_ratio1[key][dkey])
-            stacks[key][dkey].Add(clusterE_ratio2[key][dkey])
+            # Fill the histogram stack for the energy ratios.
+            energy_stacks[key][dkey] = rt.THStack(qu.RN(), clusterE_ratio1[key][dkey].GetTitle())
+            energy_stacks[key][dkey].Add(clusterE_ratio1[key][dkey])
+            energy_stacks[key][dkey].Add(clusterE_ratio2[key][dkey])
 
-            # 2D plots
+            # Make the 2D energy ratio plots.
             title = 'E_{pred}/E_{calib}^{tot} vs. E_{calib}^{tot} ' + key2 + ';E_{calib}^{tot} [GeV];E_{pred}/E_{calib}^{tot};Count'
             x_range = [0.,max_energy_2d]
             nbins = bins_2d
@@ -173,12 +264,38 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
             nbins[0] = nbins[0] - 1
             mean_curves_zoomed[key][dkey], clusterE_ratio2D_zoomed[key][dkey] = EnergyPlot2D(pred, calib, nbins = nbins, x_range = x_range, y_range = ratio_range_2d, title=title, offset=False)        
         
-        plots = [clusterE, clusterE_calib, clusterE_pred, clusterE_true, stacks, clusterE_ratio2D, clusterE_ratio2D_zoomed]
-        if(not full): plots = [stacks, clusterE_ratio2D, clusterE_ratio2D_zoomed]
+            # Make the energy ratio IQR plots.
+            title = 'IQR(E_{x}/E_{calib}^{tot}) ' + key2 + ';E_{calib}^{tot} [GeV];IQR'
+            x_range = [0.,max_energy_2d]
+            nbins = int(bins_2d[0]/2)
+            ratio1_iqr[key][dkey] = IqrPlot(pred, calib, title=title, nbins=nbins, x_range=x_range)
+            ratio1_iqr[key][dkey].SetLineColor(ps.main)
+            ratio2_iqr[key][dkey] = IqrPlot(meas, calib, title=title, nbins=nbins, x_range=x_range)
+            ratio2_iqr[key][dkey].SetLineColor(ps.curve)
             
+            title = 'IQR(E_{x}/E_{calib}^{tot}) ' + key2 + ';(E_{calib}^{tot} + 1) [GeV];IQR'
+            x_range = [1.,1. + 0.01 * max_energy_2d]
+            nbins = int((bins_2d[0] - 1)/2)
+            ratio1_iqr_zoomed[key][dkey] = IqrPlot(pred, calib, title=title, nbins=nbins, x_range=x_range, offset=True)
+            ratio1_iqr_zoomed[key][dkey].SetLineColor(ps.main)
+            ratio2_iqr_zoomed[key][dkey] = IqrPlot(meas, calib, title=title, nbins=nbins, x_range=x_range, offset=True)
+            ratio2_iqr_zoomed[key][dkey].SetLineColor(ps.curve)
+            
+            # Fill the histogram stack for the IQR plots.
+            iqr_stacks[key][dkey] = rt.THStack(qu.RN(),title)
+            iqr_stacks[key][dkey].Add(ratio1_iqr[key][dkey])
+            iqr_stacks[key][dkey].Add(ratio2_iqr[key][dkey])
+            
+            iqr_stacks_zoomed[key][dkey] = rt.THStack(qu.RN(),title)
+            iqr_stacks_zoomed[key][dkey].Add(ratio1_iqr_zoomed[key][dkey])
+            iqr_stacks_zoomed[key][dkey].Add(ratio2_iqr_zoomed[key][dkey])
+            
+        # Prepare the list of plots we'll show (we might exclude some).
+        plots = [clusterE, clusterE_calib, clusterE_pred, clusterE_true, energy_stacks, clusterE_ratio2D, clusterE_ratio2D_zoomed, iqr_stacks, iqr_stacks_zoomed]
+        if(not full): plots = [energy_stacks, clusterE_ratio2D, clusterE_ratio2D_zoomed, iqr_stacks, iqr_stacks_zoomed]
         dkeys = list(dsets.keys())
         
-        # make legend for the overlapping plots
+        # Make legend for the overlapping plots (1D energy ratios, and IQR plots)
         legends[key] = rt.TLegend(0.7,0.7,0.85,0.85)
         legends[key].SetBorderSize(0)
         legends[key].AddEntry(clusterE_ratio1[key][dkeys[0]],'x = pred','f')
@@ -191,23 +308,39 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
     
         for i, plot in enumerate(plots):
             x = nx * i + 1
-            if(plot == stacks):
+            if(plot == energy_stacks or plot == iqr_stacks or plot == iqr_stacks_zoomed):
                 for j, dkey in enumerate(dkeys):
                     canvs[key].cd(x + j)
-                    plot[key][dkey].Draw('NOSTACK HIST')
-                    rt.gPad.SetLogy()
+                    
+                    draw_option = 'NOSTACK HIST'
+                    if(plot != energy_stacks): draw_option = 'NOSTACK C'
+                    plot[key][dkey].Draw(draw_option)
+                    
                     rt.gPad.SetGrid()
+                    rt.gPad.SetLogy()
                     plot[key][dkey].GetHistogram().GetXaxis().SetTitle('E_{x}/E_{calib}^{tot}')
-                    plot[key][dkey].GetHistogram().GetYaxis().SetTitle(clusterE_ratio1[key][dkey].GetYaxis().GetTitle())
-                
-                    if(strat == 'jet'):
-                        plot[key][dkey].SetMinimum(5.0e-1)
-                        plot[key][dkey].SetMaximum(1.0e3)
+
+                    if(plot == energy_stacks):
+                        plot[key][dkey].GetHistogram().GetYaxis().SetTitle(clusterE_ratio1[key][dkey].GetYaxis().GetTitle())
+                        
+                        if(strat == 'jet'):
+                            plot[key][dkey].SetMinimum(5.0e-1)
+                            plot[key][dkey].SetMaximum(1.0e3)
+                    
+                        else:
+                            plot[key][dkey].SetMinimum(5.0e-1)
+                            plot[key][dkey].SetMaximum(2.0e5)   
                     
                     else:
-                        plot[key][dkey].SetMinimum(5.0e-1)
-                        plot[key][dkey].SetMaximum(2.0e5)   
-                    
+                        plot[key][dkey].GetHistogram().GetYaxis().SetTitle(ratio1_iqr[key][dkey].GetYaxis().GetTitle())
+                        plot[key][dkey].SetMinimum(0.01)
+                        plot[key][dkey].SetMaximum(1.)
+                        
+                    if(plot == iqr_stacks_zoomed):
+                        rt.gPad.SetLogx()
+                        rt.gPad.SetBottomMargin(0.15)
+                        plot[key][dkey].GetXaxis().SetTitleOffset(1.5)
+                        
                     legends[key].SetTextColor(ps.text)
                     legends[key].Draw()
 

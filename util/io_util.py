@@ -11,7 +11,18 @@ import itertools
 # def EnergyMappingInverse(x, b=0.):
 #     return np.sign(x) * (np.exp(np.abs(x)) - b)
 
+class SimpleLogMapping:
+    
+    def __init__(self,b=0.,m=0.):
+        self.b = b # unused
+        self.m = m # unused
 
+    def Forward(self,x):
+        return np.log(x)
+        
+    def Inverse(self,x):
+        return np.exp(x)
+        
 class LogMapping:
     def __init__(self,b=1.,m=0.):
         self.b = b
@@ -63,7 +74,7 @@ def MapStabilityTest(mapping_func, b_vals=[0.,.1,.5,1.,1.0e14], m_vals=[1.], x=n
     #reverse = [mapping_func(b,m).Inverse(forward) for (b,m) in mb_combos]
 
     fig,ax = plt.subplots(1,2,figsize=(16,6))
-    y_min, y_max = (-4.,4.)
+    y_min, y_max = (np.min(x),np.max(x))
     
     pu.multiplot_common(ax[0], x, forward, forward_labels, y_min=y_min, y_max=y_max, xlabel='x', ylabel='y', title='Forward Mapping', ps=ps)
     pu.multiplot_common(ax[1], x, reverse, reverse_labels, y_min=y_min, y_max=y_max, xlabel='x', ylabel='y', title='Reverse Mapping', ps=ps)

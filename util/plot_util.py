@@ -54,6 +54,7 @@ def multiplot_common(ax, xcenter, lines, labels, xlabel, ylabel,
                     x_min = None, x_max = None, 
                     y_min = None, y_max = None,
                     x_log = False, y_log = False,
+                    x_ticks = None,
                     linestyles=[], colorgrouping=-1,
                     extra_lines = [],
                     atlas_x=-1, atlas_y=-1, simulation=False,
@@ -70,6 +71,8 @@ def multiplot_common(ax, xcenter, lines, labels, xlabel, ylabel,
         
     if(y_min == None): y_min = np.minimum(0.,np.min(np.column_stack(lines)))
     if(y_max == None): y_max = 1.25 * np.max(np.column_stack(lines))
+        
+    if(x_ticks != None): ax.xaxis.set_major_locator(plt.MaxNLocator(x_ticks))
 
     for extra_line in extra_lines:
         ax.plot(extra_line[0], extra_line[1], linestyle='--', color='black')

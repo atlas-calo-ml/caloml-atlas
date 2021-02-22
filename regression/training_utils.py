@@ -6,13 +6,17 @@ from tensorflow.keras.models import load_model
 # train a single model.
 # Suffix is used in practice to label as "charged" or "neutral" regression,
 # whereas model_key is used to distinguish type/architecture.
-def TrainNetwork(regressor, x_train, y_train, x_valid, y_valid, model_key, suffix, modelpath, sample_weight, saveModel=True):
+def TrainNetwork(regressor, x_train, y_train, x_valid, y_valid, model_key, suffix, modelpath, sample_weight, saveModel=True, modelfile=None):
     model_dir = '/'.join([modelpath, model_key])
     try: os.makedirs(model_dir)
     except: pass
     
-    model_filename   = '{}/{}{}.h5'.format(model_dir,model_key,suffix)
-    history_filename = '{}/{}{}.history'.format(model_dir,model_key,suffix)
+    if(modelfile != None):
+        model_filename = modelfile
+        history_filename = model_filename.replace('.h5','.history')
+    else:
+        model_filename   = '{}/{}{}.h5'.format(model_dir,model_key,suffix)
+        history_filename = '{}/{}{}.history'.format(model_dir,model_key,suffix)
     history = regressor.fit(
         x=x_train,
         y=y_train,
@@ -34,10 +38,17 @@ def TrainNetwork(regressor, x_train, y_train, x_valid, y_valid, model_key, suffi
 # Load a network -- note that you pass a regressor, which will be an empty wrapper.
 # It will be filled with the actual saved network.
 # Returns history.
-def LoadNetwork(regressor, model_key, suffix, modelpath):
+def LoadNetwork(regressor, model_key, suffix, modelpath, modelfile=None):
     model_dir = '/'.join([modelpath, model_key])
-    model_filename   = '{}/{}{}.h5'.format(model_dir,model_key,suffix)
-    history_filename = '{}/{}{}.history'.format(model_dir,model_key,suffix)
+    
+    if(modelfile != None):
+        model_filename = modelfile
+        history_filename = modelfile.replace('.h5','.history')
+    
+    else:
+        model_filename   = '{}/{}{}.h5'.format(model_dir,model_key,suffix)
+        history_filename = '{}/{}{}.history'.format(model_dir,model_key,suffix)
+    
     history = 0
     print('     Loading model at {}.'.format(model_filename))
     regressor.model = load_model(model_filename)
@@ -49,8 +60,12 @@ def LoadNetwork(regressor, model_key, suffix, modelpath):
 # Loads or trains a network
 def PrepNetwork(regressor, model_key, suffix, modelpath, loadModel=False, **kwargs):    
     history = 0
+    
+    if('modelfile' in kwargs.keys()): modelfile = kwargs['modelfile']
+    else: modelfile = None
+    
     if(loadModel):
-        history = LoadNetwork(regressor, model_key, suffix, modelpath)
+        history = LoadNetwork(regressor, model_key, suffix, modelpath, modelfile=modelfile)
         
     else:
         x_train   = kwargs['x_train']
@@ -59,5 +74,5 @@ def PrepNetwork(regressor, model_key, suffix, modelpath, loadModel=False, **kwar
         y_valid = kwargs['y_valid']
         sample_weight = kwargs['sample_weight']
         saveModel = kwargs['saveModel']
-        history = TrainNetwork(regressor, x_train, y_train, x_valid, y_valid, model_key, suffix, modelpath, sample_weight, saveModel)
+        history = TrainNetwork(regressor, x_train, y_train, x_valid, y_valid, model_key, suffix, modelpath, sample_weight, saveModel, modelfile=modelfile)
     return history
