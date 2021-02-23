@@ -6,6 +6,7 @@ from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.layers import concatenate
 from tensorflow.keras.layers import BatchNormalization, Concatenate, Dense, Dropout, Input
 from keras.wrappers.scikit_learn import KerasRegressor
+from string import ascii_lowercase
 
 # Custom layers.
 from layers import *
@@ -37,12 +38,43 @@ def baseline_nn_All_model(strategy, lr=1e-4, decay=1e-6, dropout=-1.):
         return model
     return mod
 
+# A simple, fully-connected network architecture.
+# Inputs correspond to the reco energy, eta, as well as a vector
+# encoding the percentage of energy deposited in each calorimeter layer.
+def simple_dnn(strategy, lr=1e-4, decay=1e-6, dropout = -1.):
+    def mod():
+        with strategy.scope():
+            energy_input = Input(shape=(1,),name='energy')
+            eta_input    = Input(shape =(1,), name='eta')
+            depth_input = Input(shape=(6,),name='depth')
+            
+            
+            
+            input_list = [energy_input, eta_input, depth_input]
+            
+            X = tf.concat(values = input_list,axis=1,name='concat')
+            X = Dense(units=8, activation='relu',name='Dense1')(X)
+            X = Dense(units=8, activation='relu',name='Dense2')(X)
+            X = Dense(units=8, activation='relu',name='Dense3')(X)
+            X = Dense(units=1, kernel_initializer='normal', activation='linear')(X)
+            
+            optimizer = Adam(lr=lr, decay=decay)
+            model = Model(inputs=input_list, outputs=X, name='Simple')
+            model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
+        return model
+    return mod
 
 # An implementation of ResNet.
 # Inputs correspond with calorimeter images, as well as the reco energy and and eta.
-def resnet(strategy, channels=6, lr=5e-5):
+# To implement: The reco energy is used to rescale the input images, and the eta is just mixed in
+# at the end.
+def resnet(strategy, channels, lr, filter_sets, f_vals, s_vals, i_vals, input_shape=(128,16)):
     # create model
-    def mod(input_shape=(128,16)):
+    def mod():
+        
+        assert(len(filter_sets) == len(f_vals))
+        assert(len(f_vals) == len(s_vals))
+        
         with strategy.scope():
             
             # First, the real ResNet portion of the network -- using the images.
@@ -68,81 +100,85 @@ def resnet(strategy, channels=6, lr=5e-5):
             for i in range(channels):
                 normalizations[i] = tf.expand_dims(normalizations[i],axis=1) # call for 1st time
                 normalizations[i] = tf.expand_dims(normalizations[i],axis=1) # call a 2nd time
-
             scaled_inputs2 = [tf.math.multiply(normalizations[i],scaled_inputs[i]) for i in range(channels)]
 
             # Now "stack" the images along the channels dimension.
             X = tf.concat(values=scaled_inputs, axis=3, name='concat')
-            #print('In:',X.shape)
-            
             X = ZeroPadding2D((3,3))(X)
-            #print('S0:',X.shape)
             
             # Stage 1
             X = Conv2D(64, (7, 7), strides=(2, 2), name='conv1', kernel_initializer=glorot_uniform(seed=0))(X)
             X = BatchNormalization(axis=3, name='bn_conv1')(X)
             X = Activation('relu')(X)
-            X = MaxPooling2D((3, 3), strides=(2, 2))(X)
-            #print('S1:',X.shape)
+            X = MaxPooling2D((3, 3), strides=(2, 2))(X)            
             
-            # Stage 2
-            filters = [64, 64, 256]
-            f = 3
-            stage = 2
-            X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=1)
-            X = identity_block(X, f, filters, stage=stage, block='b')
-            X = identity_block(X, f, filters, stage=stage, block='c')
-            #print('S2:',X.shape)
+            n = len(f_vals)
+            for i in range(n):
+                filters = filter_sets[i]
+                f = f_vals[i]
+                s = s_vals[i]
+                ib = i_vals[i]
+                stage = i + 1 # 1st stage is Conv2D etc. before ResNet blocks
+                X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=1)
+                for j in range(ib):
+                    X = identity_block(X, f, filters, stage=stage, block=ascii_lowercase[j+1]) # will only cause naming issues if there are many id blocks
             
-            # Stage 3
-            filters = [128, 128, 512]
-            f = 3
-            stage = 3
-            X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=2)
-            X = identity_block(X, f, filters, stage=stage, block='b')
-            X = identity_block(X, f, filters, stage=stage, block='c')
-            X = identity_block(X, f, filters, stage=stage, block='d')
-            #print('S3:',X.shape)
+#             # Stage 2
+#             filters = [64, 64, 256]
+#             f = 3
+#             stage = 2
+#             X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=1)
+#             X = identity_block(X, f, filters, stage=stage, block='b')
+#             X = identity_block(X, f, filters, stage=stage, block='c')
+            
+#             # Stage 3
+#             filters = [128, 128, 512]
+#             f = 3
+#             stage = 3
+#             X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=2)
+#             X = identity_block(X, f, filters, stage=stage, block='b')
+#             X = identity_block(X, f, filters, stage=stage, block='c')
+#             X = identity_block(X, f, filters, stage=stage, block='d')
 
-            # Stage 4
-            filters = [256, 256, 1024]
-            f = 3
-            stage = 4
-            X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=2)
-            X = identity_block(X, f, filters, stage=stage, block='b')
-            X = identity_block(X, f, filters, stage=stage, block='c')
-            X = identity_block(X, f, filters, stage=stage, block='d')
-            X = identity_block(X, f, filters, stage=stage, block='e')
-            X = identity_block(X, f, filters, stage=stage, block='f')
-            #print('S4:',X.shape)
+#             # Stage 4
+#             filters = [256, 256, 1024]
+#             f = 3
+#             stage = 4
+#             X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=2)
+#             X = identity_block(X, f, filters, stage=stage, block='b')
+#             X = identity_block(X, f, filters, stage=stage, block='c')
+#             X = identity_block(X, f, filters, stage=stage, block='d')
+#             X = identity_block(X, f, filters, stage=stage, block='e')
+#             X = identity_block(X, f, filters, stage=stage, block='f')
 
-            # Stage 5
-            filters = [512, 512, 2048]
-            f = 3
-            stage = 5
-            X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=2)
-            X = identity_block(X, f, filters, stage=stage, block='b')
-            X = identity_block(X, f, filters, stage=stage, block='c')
-            #print('S5:',X.shape)
+#             # Stage 5
+#             filters = [512, 512, 2048]
+#             f = 3
+#             stage = 5
+#             X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=2)
+#             X = identity_block(X, f, filters, stage=stage, block='b')
+#             X = identity_block(X, f, filters, stage=stage, block='c')
 
             # AVGPOOL
             pool_size = (2,2)
             if(X.shape[1] == 1):   pool_size = (1,2)
             elif(X.shape[2] == 1): pool_size = (2,1)
             X = AveragePooling2D(pool_size=pool_size, name="avg_pool")(X)
-            #print('S6:',X.shape)
 
             # Flatten the ResNet output.
             X = Flatten()(X)
-            #print('S7:',X.shape)
+            
+            # Now, mix things down to a handful of weights.
+            X = Dense(units=14, activation='relu',name='resnet_out')(X)
             
             # Now add in the input energy and eta (energy might've been rescaled, e.g. by a logarithm).
             # See https://github.com/tensorflow/tensorflow/issues/30355#issuecomment-553340170
             tensor_list = [X,energy_input,eta_input]
-            X = Concatenate(axis=1)(tensor_list[:])
-            #X = concatenate([tensor_list])
-            #print('S8:',X.shape)
+            X = Concatenate(axis=1)(tensor_list)
             
+            # Now add a few dense layers, so that we can get higher-order expressions with energy, eta.
+            X = Dense(units=8, activation='relu',name='Dense1')(X)
+            X = Dense(units=8, activation='relu',name='Dense2')(X)
             X = Dense(units=1, activation='linear', name='output', kernel_initializer='normal')(X)
     
             # Create model object.
