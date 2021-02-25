@@ -106,6 +106,7 @@ def LoadCaloImages(dtree,indices=-1,layers=['EMB1','EMB2','EMB3','TileBar0','Til
     return calo_images
 
 # Prepare the combined input -- this is used for our "all" DNN model.
+# TODO: In practice, doesn't dframe already have indices applied?
 def CombinedInput(dframe, dtree, indices=-1, input_keys = ['s_logE','s_eta'], layers=['EMB1','EMB2','EMB3','TileBar0','TileBar1','TileBar2'], calo_images=None):
     if(calo_images is None): calo_images = LoadCaloImages(dtree,indices,layers)
     # Concatenate images, and prepare our combined input.
@@ -132,16 +133,29 @@ def CombinedInput(dframe, dtree, indices=-1, input_keys = ['s_logE','s_eta'], la
         qu.printProgressBarColor(i, l, prefix=pfx, suffix=sfx, length=bl)
     return All_input
 
-
-def ResnetInput(dframe, dtree, indices, layers, cell_shapes, input_keys=['s_logE','s_eta'], calo_images=None):
+def ResnetInput(dframe, dtree, indices, layers, cell_shapes, input_keys=['s_logE','s_eta'], calo_images=None, rescaling=True):
     if(calo_images is None): calo_images=LoadCaloImages(dtree,indices,layers)
     rn_input = calo_images.copy()
 
     # Unflatten images. Note that the key names match those defined within resnet model in models.py, which are currently hard-coded.
     for key,imageset in rn_input.items():
-        rn_input[key] = {'input' + str(i):imageset[layer].reshape(tuple([-1] + list(cell_shapes[layer]))) for i,layer in enumerate(layers)}
-        rn_input[key]['energy'] = dframe[key][input_keys[0]].to_numpy()
-        rn_input[key]['eta'   ] = dframe[key][input_keys[1]].to_numpy()
+        rn_input[key] = {'input{}'.format(i):imageset[layer].reshape(tuple([-1] + list(cell_shapes[layer]))) for i,layer in enumerate(layers)}
+        rn_input[key]['energy'] = dframe[key][input_keys[0]][indices[key]].to_numpy()
+        rn_input[key]['eta'   ] = dframe[key][input_keys[1]][indices[key]].to_numpy()
+        
+    # Rescale images by our (scaled) energy, if requested. Their integrals already give the reco energy,
+    # but as our "energy" input will have some EnergyMapping + sklearn scaler applied, we might want to 
+    # achieve the same scaling on the images too. Rather than passing EnergyMapping and the scaler,
+    # we can just do some rescaling using the "energy" input itself. We just have to be careful to preserve
+    # the proportions of integrals of the different layers, as not to distort depth information.
+    if(rescaling):
+        for key in rn_input.keys():
+            n = rn_input[key]['energy'].shape[0]
+            integrals = np.array([np.sum(rn_input[key]['input{}'.format(x)],axis=(1,2)) for x in range(len(layers))])
+            integrals = np.sum(integrals,axis=0)
+            scale_factors = rn_input[key]['energy'] / integrals # element-wise division
+            for i in range(len(layers)):
+                rn_input[key]['input{}'.format(i)] = np.expand_dims(scale_factors, [1,2]) * rn_input[key]['input{}'.format(i)]
     return rn_input
 
 def DepthInput(dframe, dtree, indices, layers, input_keys=['s_logE','s_eta'], calo_images=None):
