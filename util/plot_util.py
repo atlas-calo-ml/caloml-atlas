@@ -14,41 +14,40 @@ params = {'legend.fontsize': 13,
           'axes.labelsize': 18}
 plt.rcParams.update(params)
 
-def histogramOverlay(frames, data, labels, xlabel, ylabel, figfile = '', 
-                        x_min = 0, x_max = 2200, xbins = 22, normed = True, y_log = False,
-                        atlas_x = -1, atlas_y = -1, simulation = False,
-                        textlist = [],
-                        ps = qu.PlotStyle('dark')):
-    xbin = np.arange(x_min, x_max, (x_max - x_min) / xbins)
-
-    plt.cla()
-    plt.clf()
+def histogramOverlay(ax, data, labels, xlabel, ylabel,
+                     x_min = 0, x_max = 2200, xbins = 22,
+                     normed = True, y_log = False,
+                     atlas_x = -1, atlas_y = -1, simulation = False,
+                     textlist = [],
+                     ps = qu.PlotStyle('dark')):
     
-    fig,ax = plt.subplots(1,1)
-    #fig.patch.set_facecolor(ps.canv_plt)
-
+    xbin = np.arange(x_min, x_max, (x_max - x_min) / xbins)
     zorder_start = -1 * len(data) # hack to get axes on top
-    for i, datum in enumerate(data):
-        ax.hist(frames[i][datum], bins = xbin, density = normed, 
-            alpha = 0.5, label=labels[i], zorder=zorder_start + i)
+    colors = ps.colors
+    
+    for i,vals in enumerate(data):
+        ax.hist(vals, bins = xbin, density = normed, 
+                alpha = 0.5, label=labels[i], 
+                color = colors[i%len(colors)], zorder=zorder_start + i)
     
     ax.set_xlim(x_min,x_max)
     
     if y_log: ax.set_yscale('log')
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
+    
+    ps.SetStylePlt(ax)
 
     # TODO: find a way to replace this
     #if atlas_x >= 0 and atlas_y >= 0:
         #ampl.draw_atlas_label(atlas_x, atlas_y, simulation = simulation, fontsize = 18)
 
-    drawLabels(fig, atlas_x, atlas_y, simulation, textlist) #TODO: fix for fig,ax implementation
+    #drawLabels(fig, atlas_x, atlas_y, simulation, textlist) #TODO: fix for fig,ax implementation
     
     ax.set_zorder = len(data)+1 #hack to keep the tick marks up
-    ax.legend()
-    if figfile != '':
-        plt.savefig(figfile, transparent=True, facecolor=ps.canv_plt)
-    plt.show()
+    legend = ax.legend(facecolor=ps.canv_plt)
+    for leg_text in legend.get_texts(): leg_text.set_color(ps.text_plt)
+    return
 
 def multiplot_common(ax, xcenter, lines, labels, xlabel, ylabel,
                     x_min = None, x_max = None, 
