@@ -1,8 +1,10 @@
+# Based on code from keras_contrib, at https://github.com/keras-team/keras-contrib/blob/master/keras_contrib/callbacks/cyclical_lr.py
+
 import tensorflow as tf
 from tensorflow import keras
 
+# Reference: 
 class CyclicLearningRate(keras.callbacks.Callback):
-    
     def __init__(self, base_lr=1.0e-3, max_lr=5.0e-3, step_size=2.0e3, mode='triangular',gamma=1., scale_fn=None, scale_mode='cycle'):
         self.base_lr = base_lr
         self.max_lr = max_lr
@@ -42,18 +44,18 @@ class CyclicLearningRate(keras.callbacks.Callback):
     def on_train_begin(self,logs={}):
         logs = logs or {}
         if(self.clr_iterations == 0):
-            keras.backend.set_value(self.model.optimizer.learning_rate, self.base_lr)
+            keras.backend.set_value(self.model.optimizer.lr, self.base_lr)
         else:
-            keras.backend.set_value(self.model.optimizer.learning_rate, self.clr())
+            keras.backend.set_value(self.model.optimizer.lr, self.clr())
             
     def on_batch_end(self, epoch, logs=None):
         logs = logs or {}
         self.clr_iterations += 1
         self.trn_iterations += 1
-        keras.backend.set_value(self.model.optimizer.learning_rate, self.clr())
+        keras.backend.set_value(self.model.optimizer.lr, self.clr())
         self.history.setdefault(
             'lr',[]).append(
-                self.model.optimizer.learning_rate
+                self.model.optimizer.lr
         )
         self.history.setdefault('iterations', []).append(self.trn_iterations)
         
@@ -62,7 +64,5 @@ class CyclicLearningRate(keras.callbacks.Callback):
             
     def on_epoch_end(self,epoch, logs=None):
         logs = logs or {}
-        logs['lr'] = keras.backend.get_value(self.model.optimizer.learning_rate)
+        logs['lr'] = keras.backend.get_value(self.model.optimizer.lr)
         
-        
-    
