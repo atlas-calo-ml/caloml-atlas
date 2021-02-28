@@ -9,7 +9,7 @@ from keras import layers
 from keras.layers import Input, Add, Dense, Activation, ZeroPadding2D, BatchNormalization, Flatten, Conv2D, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
 from keras.initializers import glorot_uniform
 
-def identity_block(X, f, filters, stage, block):
+def identity_block(X, f, filters, stage, block, normalization=True):
     """
     Implementation of the ResNet identity block.
     
@@ -36,17 +36,17 @@ def identity_block(X, f, filters, stage, block):
     
     # First component of main path
     X = Conv2D(filters = F1, kernel_size = (1, 1), strides = (1,1), padding = 'valid', name = conv_name_base + '2a', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(axis = 3, name = bn_name_base + '2a')(X)
+    if(normalization): X = BatchNormalization(axis = 3, name = bn_name_base + '2a')(X)
     X = Activation('relu')(X)
 
     # Second component of main path (≈3 lines)
     X = Conv2D(filters = F2, kernel_size = (f, f), strides = (1,1), padding = 'same', name = conv_name_base + '2b', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(axis = 3, name = bn_name_base + '2b')(X)
+    if(normalization): X = BatchNormalization(axis = 3, name = bn_name_base + '2b')(X)
     X = Activation('relu')(X)
 
     # Third component of main path (≈2 lines)
     X = Conv2D(filters = F3, kernel_size = (1, 1), strides = (1,1), padding = 'valid', name = conv_name_base + '2c', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(axis = 3, name = bn_name_base + '2c')(X)
+    if(normalization): X = BatchNormalization(axis = 3, name = bn_name_base + '2c')(X)
 
     # Final step: Add shortcut value to main path, and pass it through a RELU activation (≈2 lines)
     X = Add()([X, X_shortcut])
@@ -54,7 +54,7 @@ def identity_block(X, f, filters, stage, block):
     
     return X
 
-def convolutional_block(X, f, filters, stage, block, s = 2):
+def convolutional_block(X, f, filters, stage, block, s = 2, normalization=True):
     """
     Implementation of the ResNet convolutional block.
     
@@ -83,22 +83,22 @@ def convolutional_block(X, f, filters, stage, block, s = 2):
     ##### MAIN PATH #####
     # First component of main path 
     X = Conv2D(F1, (1, 1), strides = (s,s), name = conv_name_base + '2a', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(axis = 3, name = bn_name_base + '2a')(X)
+    if(normalization): X = BatchNormalization(axis = 3, name = bn_name_base + '2a')(X)
     X = Activation('relu')(X)
 
     # Second component of main path (≈3 lines)
     X = Conv2D(filters = F2, kernel_size = (f, f), strides = (1,1), padding = 'same', name = conv_name_base + '2b', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(axis = 3, name = bn_name_base + '2b')(X)
+    if(normalization): X = BatchNormalization(axis = 3, name = bn_name_base + '2b')(X)
     X = Activation('relu')(X)
 
     # Third component of main path (≈2 lines)
     X = Conv2D(filters = F3, kernel_size = (1, 1), strides = (1,1), padding = 'valid', name = conv_name_base + '2c', kernel_initializer = glorot_uniform(seed=0))(X)
-    X = BatchNormalization(axis = 3, name = bn_name_base + '2c')(X)
+    if(normalization): X = BatchNormalization(axis = 3, name = bn_name_base + '2c')(X)
 
     ##### SHORTCUT PATH #### (≈2 lines)
     X_shortcut = Conv2D(filters = F3, kernel_size = (1, 1), strides = (s,s), padding = 'valid', name = conv_name_base + '1',
                         kernel_initializer = glorot_uniform(seed=0))(X_shortcut)
-    X_shortcut = BatchNormalization(axis = 3, name = bn_name_base + '1')(X_shortcut)
+    if(normalization): X_shortcut = BatchNormalization(axis = 3, name = bn_name_base + '1')(X_shortcut)
 
     # Final step: Add shortcut value to main path, and pass it through a RELU activation (≈2 lines)
     X = Add()([X, X_shortcut])
