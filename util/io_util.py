@@ -28,9 +28,10 @@ class LogMapping:
         self.b = b
         self.m = m # unused
         
+    #@jit
     def Forward(self,x):
         return np.sign(x) * np.log(np.abs(x) + self.b)
-            
+    #@jit    
     def Inverse(self,x):
         return np.sign(x) * (np.exp(np.abs(x)) - self.b)
 
@@ -41,7 +42,7 @@ class LinLogMapping:
     
     #@jit
     def Forward(self, x):
-        result = np.zeros(len(x),dtype=np.dtype('f8'))
+        result = np.zeros(x.shape, dtype=np.dtype('f8'))
     
         for i in range(len(x)):
             if(x[i] <= self.b): result[i] = self.m * x[i]
@@ -50,7 +51,7 @@ class LinLogMapping:
 
     #@jit
     def Inverse(self, x):
-        result = np.zeros(len(x),dtype=np.dtype('f8'))
+        result = np.zeros(x.shape, dtype=np.dtype('f8'))
         mb = self.m * self.b
         for i in range(len(x)):
             if(x[i] <= mb): result[i] = x[i] / self.m

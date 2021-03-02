@@ -1,11 +1,9 @@
-import sys, os
+import os
 import ROOT as rt
 import numpy as np
 import scipy.stats as spst
 import matplotlib.pyplot as plt
 
-path_prefix = os.getcwd() + '/../'
-if(path_prefix not in sys.path): sys.path.append(path_prefix)
 from util import plot_util as pu
 from util import qol_util  as qu
 

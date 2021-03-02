@@ -10,7 +10,7 @@ from keras.wrappers.scikit_learn import KerasRegressor
 from string import ascii_lowercase
 
 # Custom layers.
-from layers import *
+from util.regression.layers import *
 
 # A simple, fully-connected network architecture.
 # Inputs correspond with the pixels of all the images,
