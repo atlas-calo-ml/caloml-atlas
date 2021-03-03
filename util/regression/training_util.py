@@ -47,7 +47,7 @@ def TrainNetwork(regressor, modelfile, x_train, y_train, x_valid, y_valid, sampl
     
     history=history.history
     if(saveModel):
-        if(regressor.get_params()['epochs'] != regressor.get_params()['initial_epoch']):
-            print('  Saving model to {}.'.format(model_filename))
-            regressor.model.save(model_filename)
+        #if(regressor.get_params()['epochs'] != regressor.get_params()['initial_epoch']):
+        print('  Saving model to {}.'.format(model_filename))
+        regressor.model.save(model_filename)
     return history
