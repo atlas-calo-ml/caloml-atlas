@@ -120,26 +120,23 @@ def MedianPlot(e1, e2, title='title;x;y', nbins = 100, x_range = [0.,2000.], off
     return hist
 
 # Big plotting function. #TODO: Should we break this up into parts?
-def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotpath, extensions=['png'], plot_size=750, strat='pion', full=True, ps=qu.PlotStyle('dark')):
+def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotpath, extensions=['png'], plot_size=750, full=True, ps=qu.PlotStyle('dark'), **kwargs):
     
     ps.SetStyle()
     
-    # Some ranges for the plots -- these are hardcoded for now.
-    if(strat == 'pion' or strat == 'pion_reweighted'):
-        max_energy = 2000. # GeV
-        max_energy_2d = max_energy
-        bin_energy = 300
-        ratio_range_2d = [0.3, 1.7]
-        bins_2d = [200,70]
-        offset_2d = False
+    max_energy = 2000. # GeV
+    max_energy_2d = max_energy
+    bin_energy = 300
+    ratio_range_2d = [0.3, 1.7]
+    bins_2d = [200,70]
     
-    else:
-        max_energy = 100
-        max_energy_2d = 10.
-        bin_energy = 20
-        ratio_range_2d = [0., 5.]
-        bins_2d = [50,125]
-        offset_2d = True
+    if('max_energy' in kwargs.keys()): 
+        max_energy = kwargs['max_energy']
+        max_energy_2d = max_energy
+    if('max_energy_2d' in kwargs.keys()): max_energy = kwargs['max_energy_2d']
+    if('bin_energy' in kwargs.keys()): bin_energy = kwargs['bin_energy']
+    if('ratio_range_2d' in kwargs.keys()): ratio_range_2d = kwargs['ratio_range_2d']
+    if('bins_2d' in kwargs.keys()): bins_2d = kwargs['bins_2d']
     
     # Dictionaries to keep track of all our histogram objects.
     # Each entry will be a dictionary of hists.
@@ -321,13 +318,12 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
                     if(plot == energy_stacks):
                         plot[key][dkey].GetHistogram().GetYaxis().SetTitle(clusterE_ratio1[key][dkey].GetYaxis().GetTitle())
                         
-                        if(strat == 'jet'):
-                            plot[key][dkey].SetMinimum(5.0e-1)
-                            plot[key][dkey].SetMaximum(1.0e3)
+#                         if(strat == 'jet'):
+#                             plot[key][dkey].SetMinimum(5.0e-1)
+#                             plot[key][dkey].SetMaximum(1.0e3)
                     
-                        else:
-                            plot[key][dkey].SetMinimum(5.0e-1)
-                            plot[key][dkey].SetMaximum(2.0e5)   
+                        plot[key][dkey].SetMinimum(5.0e-1)
+                        plot[key][dkey].SetMaximum(2.0e5)   
                     
                     else:
                         plot[key][dkey].GetHistogram().GetYaxis().SetTitle(ratio1_iqr[key][dkey].GetYaxis().GetTitle())
