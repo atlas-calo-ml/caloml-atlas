@@ -6,11 +6,11 @@ from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.layers import concatenate
 from tensorflow.keras.layers import BatchNormalization, Concatenate, Dense, Dropout, Input
 from tensorflow.keras.layers.experimental.preprocessing import RandomFlip
-from keras.wrappers.scikit_learn import KerasRegressor
+from keras.wrappers.scikit_learn import KerasRegressor # TODO: tf.keras version?
 from string import ascii_lowercase
 
 # Custom layers.
-from util.keras.layers import *
+from util.keras.layers_old import * # TODO: Update to using new layers
 
 # A simple, fully-connected network architecture.
 # Inputs correspond with the pixels of all the images,

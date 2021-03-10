@@ -5,6 +5,7 @@ from util.keras import clr, lrlog, lr_schedule, epoch_update
 
 # Checkpoint the model (by default, at every epoch).
 def Checkpoint(modelfile, monitor='val_loss', save_best_only=False,save_freq='epoch'):
+    if('.h5' not in modelfile): modelfile = modelfile #+ '.ckpt'
     return tf.keras.callbacks.ModelCheckpoint(
         filepath=modelfile,
         monitor=monitor,
@@ -17,9 +18,10 @@ def Checkpoint(modelfile, monitor='val_loss', save_best_only=False,save_freq='ep
 
 # Log our trainng metrics (loss etc.) in a CSV file.
 def Logger(modelfile, append=True):
-    csv_file = modelfile.replace('.h5','.csv')
+    if('.h5' in modelfile): history_filename = '.'.join(modelfile.split('.')[:-1]) + '.csv'
+    else: history_filename = modelfile + '.csv' # if using .tf format, there won't be a file extension on the string at all.    
     return tf.keras.callbacks.CSVLogger(
-        filename=csv_file,
+        filename=history_filename,
         append=append
     )
 

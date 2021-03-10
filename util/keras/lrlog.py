@@ -21,12 +21,12 @@ class LRLog(keras.callbacks.Callback):
         # lr_t = lr / (1 + decay * iterations). This is potentially useful information if we need to restart
         # a run, and continue applying the same decay (so we will need to log how many iterations
         # we have reached).
-        iterations = self.model.optimizer.iterations.numpy()
-        logs['iterations'] = iterations
+        #iterations = self.model.optimizer.iterations.numpy()
+        #logs['iterations'] = iterations
         
-#         # Get the "true" learning rate. There might be a decay applied,
-#         # so this learning rate is not necessarily equal to self.model.optimizer.lr.
-#         # This is the learning rate at the *end* of the epoch.
-        lr_t = self.model.optimizer._decayed_lr(tf.float32).numpy()
-        logs['lr_decayed'] = lr_t
+        # Get the "true" learning rate. There might be a decay applied,
+        # so this learning rate is not necessarily equal to self.model.optimizer.lr.
+        # This is the learning rate at the *end* of the epoch.
+        #lr_t = self.model.optimizer._decayed_lr(tf.float32).numpy()
+        #logs['lr_decayed'] = lr_t
         return
