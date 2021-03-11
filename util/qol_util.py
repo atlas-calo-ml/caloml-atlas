@@ -73,7 +73,7 @@ class PlotStyle:
         self.colors = [
             'xkcd:medium purple', # first pass thrpugh rainbow
             'xkcd:periwinkle blue', 
-            'xkcd:true blue',
+            'xkcd:aqua blue',
             'xkcd:electric lime',
             'xkcd:kelly green',
             'xkcd:tangerine',
@@ -81,7 +81,7 @@ class PlotStyle:
             'xkcd:bright red',
             'xkcd:indigo', # second pass through rainbow
             'xkcd:dark teal',
-            'xkcd:aqua blue',
+            'xkcd:true blue',
             'xkcd:dark olive green',
             'xkcd:macaroni and cheese',
             'xkcd:burnt orange',
@@ -172,7 +172,7 @@ def DrawSet(hists, logx=False, logy=True, paves = 0):
 
 
 # Saving subplots to individual files. Can't believe this isn't built-in to matplotlib.
-def SaveSubplots(fig, axes, names, extensions = ['png'], savedir=''):
+def SaveSubplots(fig, axes, names, extensions = ['png'], savedir='', ps=PlotStyle('dark')):
     assert(len(axes.flatten()) == len(names))
     for i in range(len(names)):
         bbox = axes.flatten()[i].get_tightbbox(fig.canvas.get_renderer()).transformed(fig.dpi_scale_trans.inverted())
@@ -180,7 +180,7 @@ def SaveSubplots(fig, axes, names, extensions = ['png'], savedir=''):
         for ext in extensions:
             savename = names[i] + '.' + ext
             if(savedir != ''): savename = savedir + '/' + savename
-            plt.savefig(savename,bbox_inches=bbox)
+            plt.savefig(savename,bbox_inches=bbox, facecolor=ps.canv_plt)
     return
 
 # Hiding print statements.

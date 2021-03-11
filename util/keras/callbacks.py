@@ -58,10 +58,13 @@ def EarlyStop(monitor='val_loss', min_delta=.01, patience=2, verbose=1, restore_
 
 # -- ... and a function that simply returns a default set of them! --
 def GetCallbacks(modelfile, append=True, use_decay=True, use_clr=False, use_stopping=True, **kwargs):
-    checkpt = Checkpoint(modelfile)
+    
+    checkpt = Checkpoint(modelfile, save_best_only=use_stopping)
+    callbacks = [checkpt]
+    
     lrl = LrLog()
     logger = Logger(modelfile,append)
-    callbacks = [checkpt]
+
     if(use_decay):
         decay = LrDecay(kwargs['gamma'])
         callbacks.append(decay)
@@ -81,6 +84,6 @@ def GetCallbacks(modelfile, append=True, use_decay=True, use_clr=False, use_stop
             patience=patience
         )
         callbacks.append(early_stop)
-        
+
     callbacks = callbacks + [lrl, logger]
     return callbacks
