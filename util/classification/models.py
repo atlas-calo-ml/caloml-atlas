@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.keras import Sequential
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.optimizers import SGD, Adam
-from tensorflow.keras.layers import Input, Add, Dense, Dropout, Activation, ZeroPadding2D, Flatten, Conv2D, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
+from tensorflow.keras.layers import Input, Add, Concatenate, Dense, Dropout, Activation, ZeroPadding2D, Flatten, Conv2D, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
 from tensorflow.keras.layers.experimental.preprocessing import RandomFlip
 from string import ascii_lowercase
 
@@ -38,6 +38,97 @@ class baseline_nn_model():
             # compile model
             optimizer = Adam(lr=lr)
             model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
+        return model
+
+# A "simple" convolutional neural network (CNN). Uses a single calo image.
+class baseline_cnn_model():
+    def __init__(self, input_shape, f, pool, lr=5e-5, augmentation=True):
+        self.lr = lr
+        self.input_shape = tuple(list(input_shape) + [1])
+        self.f = f
+        self.pool = pool
+        self.augmentation = augmentation
+        self.custom_objects = {}
+        
+    def model(self):
+        lr = self.lr
+        input_shape = self.input_shape
+        f = self.f
+        pool = self.pool
+        augmentation = self.augmentation
+        
+        X_in = Input(input_shape,name='input')
+        # Augmentation: randomly flip the image during training
+        if(augmentation): X = RandomFlip(name='aug_reflect')(X_in)
+        else: X = X_in
+        X = Conv2D(32, f, name='conv1', activation='relu')(X)            
+        #temp_pool = (2,2) #TODO: Including this pooling caused model to fail to compile. Did this work in original CNN notebook w/ original parameter choices?
+        #X = MaxPooling2D(temp_pool)(X)            
+        X = Conv2D(16, pool, activation='relu')(X)
+        X = MaxPooling2D(pool)(X)
+        X = Flatten()(X)
+        X = Dense(128,activation='relu')(X)
+        X = Dense(50,activation='relu')(X)
+        X = Dense(2, kernel_initializer='normal', activation='softmax')(X)
+        model = Model(inputs=X_in, outputs=X, name='SL_CNN')
+        # compile model
+        optimizer = Adam(lr=lr)
+        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
+        return model
+
+# A model that uses all 3 EMB layers.
+# As a result, the input shapes are hard-coded.
+class emb_cnn_model():
+    def __init__(self, lr=5e-5, augmentation=True):
+        self.lr = lr
+        self.augmentation = augmentation
+        self.custom_objects = {}
+        
+    def model(self):
+        lr = self.lr
+        augmentation = self.augmentation
+        
+        # EMB1 image (convolutional)
+        input0 = Input(shape=(128, 4, 1), name='EMB1')
+        if(augmentation): X0 = RandomFlip(name='aug_reflect_0')(input0)
+        else: X0 = input0
+        X0 = Conv2D(32, (4, 2), activation='relu')(input0)
+        X0 = MaxPooling2D(pool_size=(2, 2))(X0)
+        X0 = Dropout(0.2)(X0)
+        X0 = Flatten()(X0)
+        X0 = Dense(128, activation='relu')(X0)
+
+        # EMB2 image (convolutional)
+        input1 = Input(shape=(16, 16, 1), name='EMB2')
+        if(augmentation): X1 = RandomFlip(name='aug_reflect_1')(input1)
+        else: X1 = input1
+        X1 = Conv2D(32, (4, 4), activation='relu')(input1)
+        X1 = MaxPooling2D(pool_size=(2, 2))(X1)
+        X1 = Dropout(0.2)(X1)
+        X1 = Flatten()(X1)
+        X1 = Dense(128, activation='relu')(X1)
+    
+        # EMB3 image (convolutional)
+        input2 = Input(shape=(8, 16, 1), name='EMB3')
+        if(augmentation): X2 = RandomFlip(name='aug_reflect_2')(input2)
+        else: X2 = input2
+        X2 = Conv2D(32, (2, 4), activation='relu')(input2)
+        X2 = MaxPooling2D(pool_size=(1, 2))(X2)
+        X2 = Dropout(0.2)(X2)
+        X2 = Flatten()(X2)
+        X2 = Dense(128, activation='relu')(X2)
+
+        # concatenate outputs from the three networks above
+        X = Concatenate(axis=1)([X0, X1, X2]) # remember that axis=0 is batch!
+        X = Dense(50, activation='relu')(X)    
+
+        # final output
+        X = Dense(2, activation='softmax')(X)
+        model = Model(inputs = [input0, input1, input2], outputs=X)
+    
+        # compile model
+        optimizer = Adam(lr=lr)
+        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
     
 # A simple implementation of ResNet.
@@ -146,7 +237,7 @@ class simple_combine_model():
         with strategy.scope():
             model = Sequential()
             model.add(Dense(n_input, input_dim=n_input, kernel_initializer='normal', activation='relu'))
-            model.add(Dense(4, activation='relu'))
+            model.add(Dense(4, activation='relu')) # TODO: Change width from 4 to n_input?
             model.add(Dense(2, kernel_initializer='normal', activation='softmax'))
             # compile model
             optimizer = Adam(lr=lr)
