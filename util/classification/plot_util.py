@@ -69,6 +69,8 @@ def RocCurves(model_scores, data_labels, roc_fpr, roc_tpr, roc_thresh, roc_auc, 
         print('Area under curve for {}: {}'.format(model_key, roc_auc[model_key]))
         
     if(not drawPlots): return
+    
+    # TODO: Sort model_keys by AUC
         
     # Make a plot of the ROC curves
     fig, ax = plt.subplots(1,2,figsize=figsize)

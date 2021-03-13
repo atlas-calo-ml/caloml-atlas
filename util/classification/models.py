@@ -76,7 +76,7 @@ class baseline_cnn_model():
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 
-# A model that uses all 3 EMB layers.
+# A model that uses all 3 EMB layers (as separate, 1-channel images).
 # As a result, the input shapes are hard-coded.
 class emb_cnn_model():
     def __init__(self, lr=5e-5, augmentation=True):
@@ -92,7 +92,7 @@ class emb_cnn_model():
         input0 = Input(shape=(128, 4, 1), name='EMB1')
         if(augmentation): X0 = RandomFlip(name='aug_reflect_0')(input0)
         else: X0 = input0
-        X0 = Conv2D(32, (4, 2), activation='relu')(input0)
+        X0 = Conv2D(32, (4, 2), activation='relu')(X0)
         X0 = MaxPooling2D(pool_size=(2, 2))(X0)
         X0 = Dropout(0.2)(X0)
         X0 = Flatten()(X0)
@@ -102,7 +102,7 @@ class emb_cnn_model():
         input1 = Input(shape=(16, 16, 1), name='EMB2')
         if(augmentation): X1 = RandomFlip(name='aug_reflect_1')(input1)
         else: X1 = input1
-        X1 = Conv2D(32, (4, 4), activation='relu')(input1)
+        X1 = Conv2D(32, (4, 4), activation='relu')(X1)
         X1 = MaxPooling2D(pool_size=(2, 2))(X1)
         X1 = Dropout(0.2)(X1)
         X1 = Flatten()(X1)
@@ -112,8 +112,8 @@ class emb_cnn_model():
         input2 = Input(shape=(8, 16, 1), name='EMB3')
         if(augmentation): X2 = RandomFlip(name='aug_reflect_2')(input2)
         else: X2 = input2
-        X2 = Conv2D(32, (2, 4), activation='relu')(input2)
-        X2 = MaxPooling2D(pool_size=(1, 2))(X2)
+        X2 = Conv2D(32, (2, 4), activation='relu')(X2)
+        X2 = MaxPooling2D(pool_size=(2, 2))(X2)
         X2 = Dropout(0.2)(X2)
         X2 = Flatten()(X2)
         X2 = Dense(128, activation='relu')(X2)
@@ -131,6 +131,135 @@ class emb_cnn_model():
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
     
+# A model that uses all 6 calo layers (as separate, 1-channel images).
+# As a result, the input shapes are hard-coded.
+class all_cnn_model():
+    def __init__(self, lr=5e-5, augmentation=True):
+        self.lr = lr
+        self.augmentation = augmentation
+        self.custom_objects = {}
+        
+    def model(self):
+        lr = self.lr
+        augmentation = self.augmentation
+        
+        # EMB1 image (convolutional)
+        input0 = Input(shape=(128, 4, 1), name='EMB1')
+        if(augmentation): X0 = RandomFlip(name='aug_reflect_0')(input0)
+        else: X0 = input0
+        X0 = Conv2D(32, (4, 2), activation='relu')(X0)
+        X0 = MaxPooling2D(pool_size=(2, 2))(X0)
+        X0 = Dropout(0.2)(X0)
+        X0 = Flatten()(X0)
+        X0 = Dense(128, activation='relu')(X0)
+
+        # EMB2 image (convolutional)
+        input1 = Input(shape=(16, 16, 1), name='EMB2')
+        if(augmentation): X1 = RandomFlip(name='aug_reflect_1')(input1)
+        else: X1 = input1
+        X1 = Conv2D(32, (4, 4), activation='relu')(X1)
+        X1 = MaxPooling2D(pool_size=(2, 2))(X1)
+        X1 = Dropout(0.2)(X1)
+        X1 = Flatten()(X1)
+        X1 = Dense(128, activation='relu')(X1)
+    
+        # EMB3 image (convolutional)
+        input2 = Input(shape=(8, 16, 1), name='EMB3')
+        if(augmentation): X2 = RandomFlip(name='aug_reflect_2')(input2)
+        else: X2 = input2
+        X2 = Conv2D(32, (2, 4), activation='relu')(X2)
+        X2 = MaxPooling2D(pool_size=(2, 2))(X2)
+        X2 = Dropout(0.2)(X2)
+        X2 = Flatten()(X2)
+        X2 = Dense(128, activation='relu')(X2)
+        
+        #TileBar0 image (convolutional)
+        input3 = Input(shape=(4,4,1), name='TileBar0')
+        if(augmentation): X3 = RandomFlip(name='aug_reflect_3')(input3)
+        else: X3 = input3
+        X3 = Conv2D(32, (2,2), activation='relu')(X3)
+        X3 = MaxPooling2D(pool_size=(2,2))(X3)
+        X3 = Dropout(0.2)(X3)
+        X3 = Flatten()(X3)
+        X3 = Dense(128, activation='relu')(X3)
+
+        #TileBar1 image (convolutional)
+        input4 = Input(shape=(4,4,1), name='TileBar1')
+        if(augmentation): X4 = RandomFlip(name='aug_reflect_4')(input4)
+        else: X4 = input4
+        X4 = Conv2D(32, (2,2), activation='relu')(X4)
+        X4 = MaxPooling2D(pool_size=(2,2))(X4)
+        X4 = Dropout(0.2)(X4)
+        X4 = Flatten()(X4)
+        X4 = Dense(128, activation='relu')(X4)
+        
+        #TileBar2 image (convolutional)
+        input5 = Input(shape=(2,4,1), name='TileBar2')
+        if(augmentation): X5 = RandomFlip(name='aug_reflect_5')(input5)
+        else: X5 = input5
+        X5 = Conv2D(32, (2,2), activation='relu')(X5)
+        X5 = MaxPooling2D(pool_size=(1,2))(X5)
+        X5 = Dropout(0.2)(X5)
+        X5 = Flatten()(X5)
+        X5 = Dense(128, activation='relu')(X5)
+        
+        # concatenate outputs from the three networks above
+        X = Concatenate(axis=1)([X0, X1, X2, X3, X4, X5]) # remember that axis=0 is batch!
+        X = Dense(50, activation='relu')(X)    
+
+        # final output
+        X = Dense(2, activation='softmax')(X)
+        model = Model(inputs = [input0, input1, input2, input3, input4, input5], outputs=X)
+    
+        # compile model
+        optimizer = Adam(lr=lr)
+        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
+        return model
+    
+# A simple CNN, that uses 6-channel images.
+# Each set of images is appropriately rescaled so that their dimensions match.
+class merged_cnn_model():
+    def __init__(self, input_shape, lr=5e-5, dropout=-1., augmentation=True):
+        self.lr = lr
+        self.input_shape = input_shape
+        self.dropout = dropout
+        self.augmentation = augmentation
+        self.custom_objects = {
+            'ImageScaleBlock':ImageScaleBlock
+        } 
+        
+    def model(self):
+        input_shape = self.input_shape
+        lr = self.lr
+        dropout = self.dropout
+        augmentation = self.augmentation
+        
+        # Input images from all calorimeter layers.
+        input0 = Input(shape=(128, 4, 1), name='EMB1'    )
+        input1 = Input(shape=(16, 16, 1), name='EMB2'    )
+        input2 = Input(shape=(8, 16, 1),  name='EMB3'    )
+        input3 = Input(shape=(4, 4, 1),   name='TileBar0')
+        input4 = Input(shape=(4, 4, 1),   name='TileBar1')
+        input5 = Input(shape=(2, 4, 1),   name='TileBar2')
+        inputs = [input0, input1, input2, input3, input4, input5]
+        
+        # Rescale all our images.
+        X = ImageScaleBlock(input_shape,normalization=True, name_prefix='scaled_input_')(inputs)
+        if(augmentation): X = RandomFlip(name='aug_reflect')(X)
+        X = ZeroPadding2D((3,3))(X)
+        
+        X = Conv2D(32, (int(input_shape[0]/4), int(input_shape[1]/4)), activation='relu', data_format = 'channels_first')(X)
+        X = MaxPooling2D(pool_size=(2, 2))(X)
+        if(dropout > 0.): X = Dropout(dropout)(X)
+        X = Flatten()(X)
+        X = Dense(128, activation='relu')(X)
+        output = Dense(2, activation='softmax')(X)
+        
+        model = Model(inputs=inputs, outputs=output)
+        optimizer = Adam(lr=lr)
+        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
+        return model
+        
 # A simple implementation of ResNet.
 # As input, this takes multiple images, which may be of different sizes,
 # and they are all rescaled to a user-specified size.
