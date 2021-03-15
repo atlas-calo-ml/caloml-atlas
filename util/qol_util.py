@@ -77,12 +77,13 @@ class PlotStyle:
             'xkcd:electric lime',
             'xkcd:kelly green',
             'xkcd:tangerine',
+            'xkcd:wheat',
             'xkcd:bordeaux',
             'xkcd:bright red',
-            'xkcd:indigo', # second pass through rainbow
+            'xkcd:baby purple', # second pass through rainbow
             'xkcd:dark teal',
             'xkcd:true blue',
-            'xkcd:dark olive green',
+            'xkcd:very light green',
             'xkcd:macaroni and cheese',
             'xkcd:burnt orange',
             'xkcd:brick red',
