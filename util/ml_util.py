@@ -316,3 +316,122 @@ def upscaleList(val_list, scale):
     else:
          raise ValueError('Scale must be greater than or equal to one')
     return out_list
+
+class cell_info:
+    '''
+    Convenience accessor for retrieving cell information via the 'cluster_cell_ID' hash.
+    The constructor takes a path to a root file containing the 'CellGeo' tree as its only argument.
+    Given the 'cluster_cell_ID' hash for a cell, retrieve its information by indexing a cell_info object with that hash; for example:
+      ci = cell_info('inputfile.root')
+      ci[1149470720] # hash for a cell in TileBar0 (cell_geo_sampling=12)
+    Alternatively, you can use the member functions 'get_cell_info' or 'get_cell_info_vector' directly by passing them the hash as their only argument.
+    '''
+    meta_tree = 'CellGeo'
+    id_branch = 'cell_geo_ID'
+    
+    def __init__(self, metafile):
+        with ur.open(metafile) as ifile:
+            self.meta_keys = ifile[self.meta_tree].keys()
+            self.celldata = ifile[self.meta_tree].arrays(
+                self.meta_keys)
+            
+        self.id_map = {}
+        for i, cell_id in enumerate(self.celldata[self.id_branch][0]):
+            self.id_map[cell_id] = i
+
+    def get_cell_info(self, cell_id):
+        return {
+            k : self.celldata[k][0][self.id_map[cell_id]]
+            for k in self.meta_keys
+        }
+    
+    def get_cell_info_vector(self, cell_id):
+        res = []
+        for k in self.meta_keys:
+            if(k == self.id_branch):
+                continue
+            res.append(self.celldata[k][0][self.id_map[cell_id]])
+        return res
+    
+    def __getitem__(self, key):
+        return self.get_cell_info(key)
+
+def create_cell_images(input_file, sampling_layers, c_info=None,
+                       eta_range=0.4, phi_range=0.4, print_frequency=100):
+    '''Generates images from a 'graph' format input file.
+    The output is a dictionary with the following structure:
+      images[layer][event_index][eta_index][phi_index]
+    The arguments are as follows:
+      input_file: path to the desired input file
+      sampling_layers: a dict which specifies which layers should
+                       have images generated for them; this dict
+                       should have entries of the form
+                         (int)cell_geo_sampling : 'LayerName'
+      c_info: either a path to a root file which contains the
+              'CellGeo' tree, or a cell_info object; defaults
+              to using input_file to create a cell_info object
+              if not provided
+      eta/phi_range: full width of the 'window' around cluster
+                     centres to render images in; cells outside
+                     this window will be ignored
+      print_frequency: progress printout will be displayed every
+                       integer multiple of this parameter
+    '''
+    
+    if(c_info==None):
+        ci = cell_info(input_file)
+    elif(isinstance(c_info,str)):
+        ci = cell_info(c_info)
+    elif(isinstance(c_info,cell_info)):
+        ci = c_info
+    else:
+        raise ValueError('Invalid argument for c_info: must be cell_info object or path to a root file with the CellGeo tree.')
+    
+    with ur.open(input_file) as ifile:
+        entries = ifile['EventTree'].num_entries
+        pdata = ifile['EventTree'].arrays(
+            ['cluster_cell_ID', 'cluster_cell_E', 'cluster_E', 'cluster_Eta', 'cluster_Phi'])
+    
+    eta_min = -1*eta_range/2.0
+    phi_min = -1*phi_range/2.0
+    
+    pcells = {
+        layer : np.zeros((entries,meta['len_eta'],meta['len_phi']))
+        for layer,meta in mu.cell_meta.items()
+    }
+    
+    for evt in range(entries):
+        if((evt+1)%print_frequency==0):
+            print('Event {}/{}'.format(evt+1,entries))
+            
+        for clus in range(len(pdata['cluster_cell_ID'][evt])):
+            for cell in range(len(pdata['cluster_cell_ID'][evt][clus])):
+                c_info = ci[pdata['cluster_cell_ID'][evt][clus][cell]]
+                if c_info['cell_geo_sampling'] in sampling_layers:
+                    layer = sampling_layers[c_info['cell_geo_sampling']]
+                    c_eta = pdata['cluster_Eta'][evt][clus]
+                    c_phi = pdata['cluster_Phi'][evt][clus]
+
+                    # calculate eta/phi bins using the formula
+                    #   bin = floor( (x-x_min) * nbins / x_range )
+                    eta_bin = int(
+                        (c_info['cell_geo_eta']-c_eta-eta_min) *
+                        mu.cell_meta[layer]['len_eta'] / eta_range
+                    )
+                    phi_bin = int(
+                        (c_info['cell_geo_phi']-c_phi-phi_min) *
+                        mu.cell_meta[layer]['len_phi'] / phi_range
+                    )
+
+                    # discard cells outside the eta/phi window
+                    if(eta_bin<0 or
+                       eta_bin>=mu.cell_meta[layer]['len_eta'] or
+                       phi_bin<0 or
+                       phi_bin>=mu.cell_meta[layer]['len_phi']):
+                        continue
+
+                    pcells[layer][evt][eta_bin][phi_bin] += pdata['cluster_cell_E'][evt][clus][cell] / pdata['cluster_E'][evt][clus]
+                    # note: 'cluster_E' includes energies from cells with <5 MeV, which are not
+                    # included in this dataset, so the energy fraction will be slightly off
+        
+    return pcells
