@@ -170,17 +170,18 @@ class ConvolutionBlock(layers.Layer):
         return config
 
 class ImageScaleBlock(layers.Layer):
-    def __init__(self, new_shape, normalization=True, name_prefix = 'scaled_input_', **kwargs):
+    def __init__(self, new_shape, normalization=True, name_prefix='scaled_input_', method='nearest', **kwargs):
         super(ImageScaleBlock, self).__init__(**kwargs) # god knows what this does...
         
         # retrieve attributes
         self.new_shape = new_shape
         self.normalization = normalization
         self.name_prefix = name_prefix
+        self.method = method
         
     def call(self, inputs):
         channels = len(inputs)
-        scaled_inputs = [tf.image.resize(x,self.new_shape,name=self.name_prefix+str(i)) for i,x in enumerate(inputs)]            
+        scaled_inputs = [tf.image.resize(x,self.new_shape,name=self.name_prefix+str(i), method=self.method) for i,x in enumerate(inputs)]            
         if(self.normalization):
             integrals_old = [tf.math.reduce_sum(x,axis=[1,2]) for x in inputs]
             integrals_new = [tf.math.reduce_sum(x,axis=[1,2]) for x in scaled_inputs]        

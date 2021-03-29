@@ -248,7 +248,7 @@ class merged_cnn_model():
         if(augmentation): X = RandomFlip(name='aug_reflect')(X)
         X = ZeroPadding2D((3,3))(X)
         
-        X = Conv2D(32, (int(input_shape[0]/4), int(input_shape[1]/4)), activation='relu', data_format = 'channels_first')(X)
+        X = Conv2D(32, (int(input_shape[0]/4), int(input_shape[1]/4)), activation='relu')(X)
         X = MaxPooling2D(pool_size=(2, 2))(X)
         if(dropout > 0.): X = Dropout(dropout)(X)
         X = Flatten()(X)
@@ -259,7 +259,60 @@ class merged_cnn_model():
         optimizer = Adam(lr=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
+
+# A CNN that uses two 3-channel images,
+# one corresponding with EMB and the other with TileBar.
+class merged_cnn_2p_model():
+    def __init__(self, input_shape1, input_shape2, lr=5e-5, dropout=-1., augmentation=True):
+        self.lr = lr
+        self.input_shape1 = input_shape1
+        self.input_shape2 = input_shape2
+        self.dropout = dropout
+        self.augmentation = augmentation
+        self.custom_objects = {
+            'ImageScaleBlock':ImageScaleBlock
+        } 
+
+    def model(self):
+        input_shapes = [self.input_shape1, self.input_shape2]
+        lr = self.lr
+        dropout = self.dropout
+        augmentation = self.augmentation
         
+        # Input images from all calorimeter layers.
+        input0 = Input(shape=(128, 4, 1), name='EMB1'    )
+        input1 = Input(shape=(16, 16, 1), name='EMB2'    )
+        input2 = Input(shape=(8, 16, 1),  name='EMB3'    )
+        input3 = Input(shape=(4, 4, 1),   name='TileBar0')
+        input4 = Input(shape=(4, 4, 1),   name='TileBar1')
+        input5 = Input(shape=(2, 4, 1),   name='TileBar2')
+        inputs = [input0, input1, input2, input3, input4, input5]
+        
+        inputs_EMB = [input0, input1, input2]
+        inputs_TileBar = [input3, input4, input5]
+        
+        Xs = []
+        for i,input_list in enumerate([inputs_EMB, inputs_TileBar]):
+            input_shape = input_shapes[i]
+            X = ImageScaleBlock(input_shape,normalization=True, name_prefix='scaled_input_')(inputs)
+            if(augmentation): X = RandomFlip(name='aug_reflect_{}'.format(i))(X)
+            X = ZeroPadding2D((3,3))(X)
+            X = Conv2D(32, (int(input_shape[0]/4), int(input_shape[1]/4)), activation='relu')(X)
+            X = MaxPooling2D(pool_size=(2, 2))(X)
+            if(dropout > 0.): X = Dropout(dropout)(X)
+            X = Flatten()(X)
+            Xs.append(X)
+            
+        # concatenate results
+        X = Concatenate(axis=1)(Xs)
+        X = Dense(128, activation='relu')(X)
+        output = Dense(2, activation='softmax')(X)
+        
+        model = Model(inputs=inputs, outputs=output)
+        optimizer = Adam(lr=lr)
+        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
+        return model
+    
 # A simple implementation of ResNet.
 # As input, this takes multiple images, which may be of different sizes,
 # and they are all rescaled to a user-specified size.

@@ -1,3 +1,4 @@
+import os
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import roc_curve, auc
@@ -6,6 +7,9 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from util import plot_util as pu
 from util import qol_util  as qu
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # disable some of the tensorflow info printouts, only display errors
+import tensorflow as tf
 from util.keras.layers import ImageScaleBlock
 
 # Create plots of accuracy and loss.
@@ -143,7 +147,7 @@ def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_sh
             else: vmin, vmax = (-1.,1.)
 
             norm = TwoSlopeNorm(vmin=vmin,vcenter=0.,vmax=vmax)
-            if(log): norm = SymLogNorm(linthresh = 0.001, linscale=0.001, vmin=vmin, vmax=vmax)
+            if(log): norm = SymLogNorm(linthresh = 0.001, linscale=0.001, vmin=vmin, vmax=vmax, base=10.)
             cmap = plt.get_cmap('BrBG')
             
             image = pcell[layer][cluster].reshape(cell_shapes[layer])
