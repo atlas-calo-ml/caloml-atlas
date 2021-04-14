@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scipy.ndimage as ndi
+from util import qol_util as qu
 
 #define a dict for cell meta data
 cell_meta = {
@@ -79,18 +80,23 @@ def setupPionData(inputpath, rootfiles, branches = []):
                 # 'cluster_OOC_WEIGHT', 'cluster_DM_WEIGHT', 'cluster_CENTER_MAG', 'cluster_FIRST_ENG_DENS', 'cluster_cell_dR_min', 'cluster_cell_dR_max', 'cluster_cell_dEta_min', 'cluster_cell_dEta_max', 'cluster_cell_dPhi_min', 'cluster_cell_dPhi_max', 'cluster_cell_centerCellEta', 'cluster_cell_centerCellPhi', 'cluster_cell_centerCellLayer', 'cluster_cellE_norm']
     defaultBranches = ['clusterIndex', 'truthE', 'nCluster', 'clusterE', 'clusterECalib', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_ENG_CALIB_TOT', 'cluster_ENG_CALIB_OUT_T', 'cluster_ENG_CALIB_DEAD_TOT', 'cluster_EM_PROBABILITY', 'cluster_HAD_WEIGHT', 'cluster_CENTER_MAG', 'cluster_FIRST_ENG_DENS', 'cluster_cellE_norm']
 
-    if len(branches) == 0:
-        branches = defaultBranches
-
+    if len(branches) == 0: branches = defaultBranches
+    cluster_tree = 'ClusterTree'
+       
     trees = {
-        rfile: ur.open(inputpath+rfile+".root")['ClusterTree']
+        rfile: ur.open(inputpath+rfile+'.root')[cluster_tree]
         for rfile in rootfiles
     }
+    
     pdata = {
-        ifile: itree.pandas.df(branches, flatten=False)
-        for ifile, itree in trees.items()
+        rfile: ur.open(inputpath+rfile+'.root')[cluster_tree].arrays(branches, library='pd')
+        for rfile in rootfiles
     }
-
+    
+#     pdata = {
+#         ifile: itree.pandas.df(branches, flatten=False)
+#         for ifile, itree in trees.items()
+#     }
     return trees, pdata
 
 def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', testfrac = 0.2, vallabel='val'):
@@ -357,7 +363,8 @@ class cell_info:
         return self.get_cell_info(key)
 
 def create_cell_images(input_file, sampling_layers, c_info=None,
-                       eta_range=0.4, phi_range=0.4, print_frequency=100):
+                       eta_range=0.4, phi_range=0.4, print_frequency=100, 
+                       entries=-1, prefix = ''):
     '''Generates images from a 'graph' format input file.
     The output is a dictionary with the following structure:
       images[layer][event_index][eta_index][phi_index]
@@ -388,7 +395,7 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
         raise ValueError('Invalid argument for c_info: must be cell_info object or path to a root file with the CellGeo tree.')
     
     with ur.open(input_file) as ifile:
-        entries = ifile['EventTree'].num_entries
+        if(entries < 0): entries = ifile['EventTree'].num_entries
         pdata = ifile['EventTree'].arrays(
             ['cluster_cell_ID', 'cluster_cell_E', 'cluster_E', 'cluster_Eta', 'cluster_Phi'])
     
@@ -397,16 +404,18 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
     
     pcells = {
         layer : np.zeros((entries,meta['len_eta'],meta['len_phi']))
-        for layer,meta in mu.cell_meta.items()
+        for layer,meta in cell_meta.items()
     }
+    qu.printProgressBarColor (0, entries, prefix=prefix, suffix='% Complete', length=50)
     
     for evt in range(entries):
-        if((evt+1)%print_frequency==0):
-            print('Event {}/{}'.format(evt+1,entries))
-            
+        if((evt)%print_frequency==0 or evt==entries-1):
+            qu.printProgressBarColor (evt+1, entries, prefix=prefix, suffix='% Complete', length=50)
         for clus in range(len(pdata['cluster_cell_ID'][evt])):
             for cell in range(len(pdata['cluster_cell_ID'][evt][clus])):
+                
                 c_info = ci[pdata['cluster_cell_ID'][evt][clus][cell]]
+                
                 if c_info['cell_geo_sampling'] in sampling_layers:
                     layer = sampling_layers[c_info['cell_geo_sampling']]
                     c_eta = pdata['cluster_Eta'][evt][clus]
@@ -416,22 +425,22 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
                     #   bin = floor( (x-x_min) * nbins / x_range )
                     eta_bin = int(
                         (c_info['cell_geo_eta']-c_eta-eta_min) *
-                        mu.cell_meta[layer]['len_eta'] / eta_range
+                        cell_meta[layer]['len_eta'] / eta_range
                     )
                     phi_bin = int(
                         (c_info['cell_geo_phi']-c_phi-phi_min) *
-                        mu.cell_meta[layer]['len_phi'] / phi_range
+                        cell_meta[layer]['len_phi'] / phi_range
                     )
 
                     # discard cells outside the eta/phi window
                     if(eta_bin<0 or
-                       eta_bin>=mu.cell_meta[layer]['len_eta'] or
+                       eta_bin>=cell_meta[layer]['len_eta'] or
                        phi_bin<0 or
-                       phi_bin>=mu.cell_meta[layer]['len_phi']):
+                       phi_bin>=cell_meta[layer]['len_phi']):
                         continue
 
                     pcells[layer][evt][eta_bin][phi_bin] += pdata['cluster_cell_E'][evt][clus][cell] / pdata['cluster_E'][evt][clus]
                     # note: 'cluster_E' includes energies from cells with <5 MeV, which are not
-                    # included in this dataset, so the energy fraction will be slightly off
+                    # included in some datasets, so the energy fraction may be slightly off
         
     return pcells
