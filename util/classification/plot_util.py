@@ -108,7 +108,7 @@ def RocCurves(model_scores, data_labels, roc_fpr, roc_tpr, roc_thresh, roc_auc, 
 
 
 # -- Kinematic Plots below --
-def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_shapes=[], scaled_shape = [], latex_mpl = {}, plotpath = '', filename = 'plots_pi0_plus_minus.png', plotstyle=qu.PlotStyle('dark')):
+def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_shapes=[], scaled_shape = [], latex_mpl = {}, plotpath = '', filename = '', plotstyle=qu.PlotStyle('dark')):
     # Set some default values.
     if(layers == []):
         layers = ['EMB1','EMB2','EMB3','TileBar0','TileBar1','TileBar2']
@@ -127,7 +127,7 @@ def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_sh
     scaling = False
     if(scaled_shape != []): scaling = True
     
-    fig, ax = plt.subplots(2,6,figsize=(60,20))
+    fig, ax = plt.subplots(len(pcells.keys()),len(layers),figsize=(60,20))
     fig.patch.set_facecolor(plotstyle.canv_plt)
     i = 0
     for ptype, pcell in pcells.items():
@@ -178,6 +178,6 @@ def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_sh
             i += 1
             
     # show the plots
-    plt.savefig('{}/{}'.format(plotpath,filename),transparent=True,facecolor=plotstyle.canv_plt)
+    if(filename != ''): plt.savefig('{}/{}'.format(plotpath,filename),transparent=True,facecolor=plotstyle.canv_plt)
     plt.show()
     return
