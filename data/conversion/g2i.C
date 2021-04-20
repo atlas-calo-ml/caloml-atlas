@@ -3,6 +3,7 @@
 
 #include "TFile.h"
 #include "TTree.h"
+#include "TBranch.h"
 #include "TTreeReader.h"
 #include "TTreeReaderArray.h"
 #include "TString.h"
@@ -16,7 +17,7 @@
 
 void g2i(TString infile="", TString outfile="", Float_t eta_range=0.4, Float_t phi_range=0.4){
     
-    if(infile.EqualTo("") && outfile.EqualTo("")){
+    if(infile.EqualTo("") || outfile.EqualTo("")){
         std::cout << "Error: Input and/or output not specified." << std::endl;
         return;
     }
@@ -77,36 +78,60 @@ void g2i(TString infile="", TString outfile="", Float_t eta_range=0.4, Float_t p
         "cluster_nCells"
     };
     
+    // Reading was here!
+    
+    // ------ Prepare output file. ------
+    // create the output file, and its TTrees (EventTree and ClusterTree)
+    TFile* g = new TFile(outfile,"RECREATE");
+    g->cd(); // in principle, this is redundant as we have just created g so we switch to it automatically as the current file
+    
+    // When we clone EventTree, we only turn on the branches we need to clone.
+    t->SetBranchStatus("*",0);
+    for (TString branch: event_branches) t->SetBranchStatus(branch,1);
+    TTree* eventTree = t->CloneTree();
+    
+    // Now we turn on some extra branches, which will need to be read to fill ClusterTree.
+    // TODO: Just turning on cluster_branches_float & cluster_branches_int causes empty cluster vars,
+    // but turning on all branches does not. Why?
+    t->SetBranchStatus("*",1);
+    
+    TTree* clusterTree = new TTree("ClusterTree","ClusterTree");
+    
+    // add the clusterCount branch to EventTree
+    Long_t clusterCount;
+    TBranch* br_clusterCount = eventTree->Branch("clusterCount",&clusterCount,"clusterCount/L");
+    
+    // add a bunch of branches to ClusterTree.
+    // first we (neatly) handle the float branches
+    std::map<TString,Float_t> cluster_f;
+    for (TString branch: cluster_branches_float){
+        cluster_f.insert(pair<TString, Float_t>(branch, 0.));
+        TString branch_descriptor = TString(branch).Append("/F");
+        clusterTree->Branch(branch, &cluster_f[branch],branch_descriptor);
+    }
+
+    // now handle int branches
+    std::map<TString,Int_t> cluster_i;
+    for (TString branch: cluster_branches_int){
+        cluster_i.insert(pair<TString, Int_t>(branch, 0));
+        TString branch_descriptor = TString(branch).Append("/I");
+        clusterTree->Branch(branch, &cluster_i[branch],branch_descriptor);
+    }
+    
+    // now add the image branches
+    for(UInt_t i = 0; i < layers.size(); i++){
+        TString descriptor = TString::Format("%s[%i][%i]/F",layers.at(i).Data(),len_eta.at(i),len_phi.at(i));
+//         clusterTree->Branch(layers.at(i), &calo_images[(UInt_t)sampling_layers.at(i)], descriptor);
+        clusterTree->Branch(layers.at(i), calo_images[(UInt_t)sampling_layers.at(i)].GetMatrixArray(), descriptor);
+
+    }
+    
     // ------ Setup for reading. ------
     
     // A) For reading EventTree
     TTreeReader mainReader(t);
     TTreeReaderArray<std::vector<ULong_t>> cluster_cell_id(mainReader,"cluster_cell_ID");
     TTreeReaderArray<std::vector<Float_t>> cluster_cell_E(mainReader,"cluster_cell_E");
-
-    // A bunch of float vector branches
-//     TTreeReaderArray<Float_t> cluster_E(mainReader,"cluster_E");
-//     TTreeReaderArray<Float_t> cluster_E_LCCalib(mainReader,"cluster_E_LCCalib");
-//     TTreeReaderArray<Float_t> cluster_Pt(mainReader,"cluster_Pt");
-//     TTreeReaderArray<Float_t> cluster_Eta(mainReader,"cluster_Eta");
-//     TTreeReaderArray<Float_t> cluster_Phi(mainReader,"cluster_Phi");
-//     TTreeReaderArray<Float_t> cluster_ENG_CALIB_TOT(mainReader,"cluster_ENG_CALIB_TOT");
-//     TTreeReaderArray<Float_t> cluster_ENG_CALIB_OUT_T(mainReader,"cluster_ENG_CALIB_OUT_T");
-//     TTreeReaderArray<Float_t> cluster_ENG_CALIB_DEAD_TOT(mainReader,"cluster_ENG_CALIB_DEAD_TOT");
-//     TTreeReaderArray<Float_t> cluster_EM_PROBABILITY(mainReader,"cluster_EM_PROBABILITY");
-//     TTreeReaderArray<Float_t> cluster_HAD_WEIGHT(mainReader,"cluster_HAD_WEIGHT");
-//     TTreeReaderArray<Float_t> cluster_OOC_WEIGHT(mainReader,"cluster_OOC_WEIGHT");
-//     TTreeReaderArray<Float_t> cluster_DM_WEIGHT(mainReader,"cluster_DM_WEIGHT");
-//     TTreeReaderArray<Float_t> cluster_CENTER_MAG(mainReader,"cluster_CENTER_MAG");
-//     TTreeReaderArray<Float_t> cluster_FIRST_ENG_DENS(mainReader,"cluster_FIRST_ENG_DENS");
-//     TTreeReaderArray<Float_t> cluster_CENTER_LAMBDA(mainReader,"cluster_CENTER_LAMBDA");
-//     TTreeReaderArray<Float_t> cluster_ISOLATION(mainReader,"cluster_ISOLATION");
-//     TTreeReaderArray<Float_t> cluster_ENERGY_DigiHSTruth(mainReader,"cluster_ENERGY_DigiHSTruth");
-    
-//     std::map<TString,TTreeReaderArray<Float_t>*> readerArrays_f;
-//     readerArrays_f["cluster_E"] = &cluster_E;
-//     readerArrays_f["cluster_Eta"] = &cluster_Eta;
-//     readerArrays_f["cluster_Phi"] = &cluster_Phi;
 
     // for arrays of floats and ints, we use maps of TTreeReaderArray's for convenience later on.
     // see https://root-forum.cern.ch/t/storing-ttreereadervalues-in-std-map/21047/5
@@ -136,45 +161,7 @@ void g2i(TString infile="", TString outfile="", Float_t eta_range=0.4, Float_t p
     // extract cell_geo_ID vector from CellGeo tree
     geoReader.SetEntry(0); // since CellGeo is a single-entry tree (a bit of a funny structure for TTree...)
     std::vector<ULong_t> cgi;
-    for(ULong_t entry: cell_geo_ID) cgi.push_back(entry);
-    
-    // ------ Prepare output file. ------
-    // create the output file, and its TTrees (EventTree and ClusterTree)
-    TFile* g = new TFile(outfile,"RECREATE");
-    g->cd(); // in principle, this is redundant as we have just created g so we switch to it automatically as the current file
-    
-    t->SetBranchStatus("*",0);
-    for (TString branch: event_branches) t->SetBranchStatus(branch,1);
-    TTree* eventTree = t->CloneTree();
-    t->SetBranchStatus("*",1);
-    TTree* clusterTree = new TTree("ClusterTree","ClusterTree");
-    
-    // add the clusterCount branch to EventTree
-    Long_t clusterCount;
-    eventTree->Branch("clusterCount",&clusterCount,"clusterCount/L");
-    
-    // add a bunch of branches to ClusterTree.
-    // first we (neatly) handle the float branches
-    std::map<TString,Float_t> cluster_f;
-    for (TString branch: cluster_branches_float){
-        cluster_f.insert(pair<TString, Float_t>(branch, 0.));
-        TString branch_descriptor = TString(branch).Append("/F");
-        clusterTree->Branch(branch, &cluster_f[branch],branch_descriptor);
-    }
-
-    // now handle int branches
-    std::map<TString,Int_t> cluster_i;
-    for (TString branch: cluster_branches_int){
-        cluster_i.insert(pair<TString, Int_t>(branch, 0));
-        TString branch_descriptor = TString(branch).Append("/I");
-        clusterTree->Branch(branch, &cluster_i[branch],branch_descriptor);
-    }
-    
-    // now add the image branches
-    for(UInt_t i = 0; i < layers.size(); i++){
-        TString descriptor = TString::Format("%s[%i][%i]/F",layers.at(i).Data(),len_eta.at(i),len_phi.at(i));
-        clusterTree->Branch(layers.at(i), &calo_images[(UInt_t)sampling_layers.at(i)], descriptor);
-    }
+    for(ULong_t entry: cell_geo_ID) cgi.push_back(entry);    
     
     clusterCount = 0;
     // ------ Event loop. ------
@@ -244,7 +231,7 @@ void g2i(TString infile="", TString outfile="", Float_t eta_range=0.4, Float_t p
             clusterTree->Fill();
         }
         // fill our new EventTree (adding clusterCount)
-        eventTree->Fill();
+        br_clusterCount->Fill();
         
         // now increase clusterCount
         clusterCount += ncluster;

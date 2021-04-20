@@ -1,4 +1,4 @@
-import sys, os, glob, argparse
+import sys, os, glob, argparse, time, datetime
 import subprocess as sub
 import ROOT as rt
 
@@ -25,8 +25,9 @@ def main(args):
     print('Converting {} files.'.format(n))
     
     prefix = 'Converting files:'
-    suffix = '% Complete'
+    suffix = 'Complete'
     qu.printProgressBarColor (0, n, prefix=prefix, suffix=suffix, length=50)
+    start_time = time.time()
     for i in range(n):
         
         output_subdir = '/'.join(output_files[i].split('/')[:-1])
@@ -36,6 +37,10 @@ def main(args):
         command = 'root -q -l -b -x \'g2i.C+("{}", "{}")\''.format(input_files[i], output_files[i])
         sub.check_call(command, shell=True, stdout=sub.DEVNULL, stderr=sub.DEVNULL)
         qu.printProgressBarColor (i+1, n, prefix=prefix, suffix=suffix, length=50)
+    
+    end_time = time.time()
+    delta_time = int(end_time - start_time)
+    print('Time elapse: {}.'.format(str(datetime.timedelta(seconds=delta_time))))
     
 if __name__ == '__main__':
     main(sys.argv)
