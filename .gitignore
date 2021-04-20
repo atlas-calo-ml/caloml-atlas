@@ -4,6 +4,9 @@ datasets
 .root
 .npz
 .vscode/settings.json
+.d
+.so
+.pcm
 classifier/.vscode/settings.json
 #classifier/Plots*
 #classifier/Models*
