@@ -89,8 +89,8 @@ def setupPionData(inputpath, rootfiles, branches = []):
     }
     
     pdata = {
-        rfile: ur.open(inputpath+rfile+'.root')[cluster_tree].arrays(branches, library='pd')
-        for rfile in rootfiles
+        ifile: pd.DataFrame(itree.arrays(expressions=branches, library='np'))
+        for ifile, itree in trees.items()
     }
     
 #     pdata = {
@@ -114,7 +114,7 @@ def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', 
     else:
         test_index = testval_index
         val_index = []
-
+        
     frame[trainlabel] = frame.index.isin(train_index)
     frame[testlabel]  = frame.index.isin(test_index)
     frame[vallabel]   = frame.index.isin(val_index)
@@ -122,6 +122,7 @@ def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', 
 def setupCells(trees, layer, nrows = -1, indices = [], flatten=True):
     if(type(trees) != list): trees = [trees]
     array = np.row_stack([tree.array(layer) for tree in trees])
+
     if nrows > 0:
         array = array[:nrows]
     elif len(indices) > 0:
@@ -365,6 +366,7 @@ class cell_info:
 def create_cell_images(input_file, sampling_layers, c_info=None,
                        eta_range=0.4, phi_range=0.4, print_frequency=100, 
                        entries=-1, prefix = ''):
+
     '''Generates images from a 'graph' format input file.
     The output is a dictionary with the following structure:
       images[layer][event_index][eta_index][phi_index]
@@ -396,6 +398,7 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
     
     with ur.open(input_file) as ifile:
         if(entries < 0): entries = ifile['EventTree'].num_entries
+
         pdata = ifile['EventTree'].arrays(
             ['cluster_cell_ID', 'cluster_cell_E', 'cluster_E', 'cluster_Eta', 'cluster_Phi'])
     
@@ -442,5 +445,5 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
                     pcells[layer][evt][eta_bin][phi_bin] += pdata['cluster_cell_E'][evt][clus][cell] / pdata['cluster_E'][evt][clus]
                     # note: 'cluster_E' includes energies from cells with <5 MeV, which are not
                     # included in some datasets, so the energy fraction may be slightly off
-        
+
     return pcells
