@@ -121,7 +121,7 @@ def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', 
 
 def setupCells(trees, layer, nrows = -1, indices = [], flatten=True):
     if(type(trees) != list): trees = [trees]
-    array = np.row_stack([tree.array(layer) for tree in trees])
+    array = np.row_stack([tree[layer].array(library='np') for tree in trees])
 
     if nrows > 0:
         array = array[:nrows]
