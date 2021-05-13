@@ -5,15 +5,14 @@ from tensorflow.keras.models import load_model
 
 # Given some input, indices, and a model filename,
 # train an instance of the given model.
-def TrainNetwork(
-    model, 
-    modelfile, 
-    x_train, y_train, 
-    x_valid, y_valid, 
-    callbacks = [], 
-    epochs=20, batch_size=200, verbose=1, 
-    overwriteModel=False, finishTraining=True,
-    custom_objects = {}):
+def TrainNetwork(model, 
+                 modelfile, 
+                 x_train, y_train, 
+                 x_valid, y_valid, 
+                 callbacks = [], 
+                 epochs=20, batch_size=200, verbose=1, 
+                 overwriteModel=False, finishTraining=True,
+                 custom_objects = {}):
     
     model, custom_objects = model.model(), model.custom_objects
     
