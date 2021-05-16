@@ -82,7 +82,7 @@ class simple_dnn():
         return model    
     
 class resnet():
-    def __init__(self, lr=5e-5, decay=1e-6, filter_sets, f_vals, s_vals, i_vals, channels=6, input_shape=(128,16), augmentation=True, normalization=True):
+    def __init__(self, lr, decay, filter_sets, f_vals, s_vals, i_vals, channels=6, input_shape=(128,16), augmentation=True, normalization=True):
 
         self.decay = decay
         self.lr = lr

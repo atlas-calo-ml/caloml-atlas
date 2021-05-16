@@ -120,8 +120,8 @@ def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_sh
     
     if(latex_mpl == {}):
         latex_mpl = {
-            'pi0': '$\pi^{0}$',
-            'piplus': '$\pi^{+}$'
+            'p0': '$\pi^{0}$',
+            'pp': '$\pi^{+}$'
         }
     
     scaling = False

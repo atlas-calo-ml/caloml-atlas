@@ -1,12 +1,13 @@
+import pathlib
 import numpy as np  
+import uproot as ur
+import awkward as ak
+import pandas as pd
+import h5py as h5
 from sklearn.model_selection import ShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_curve, auc
-import uproot as ur
 from tensorflow.keras import utils
-import pandas as pd
-import matplotlib as mpl
-import matplotlib.pyplot as plt
 import scipy.ndimage as ndi
 from util import qol_util as qu
 
@@ -75,29 +76,107 @@ def reshapeSeparateCNN(cells):
 
     return reshaped
 
-def setupPionData(inputpath, rootfiles, branches = []):
-    # defaultBranches = ['runNumber', 'eventNumber', 'truthE', 'truthPt', 'truthEta', 'truthPhi', 'clusterIndex', 'nCluster', 'clusterE', 'clusterECalib', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_ENG_CALIB_TOT', 'cluster_ENG_CALIB_OUT_T', 'cluster_ENG_CALIB_DEAD_TOT', 'cluster_EM_PROBABILITY', 'cluster_HAD_WEIGHT',
-                # 'cluster_OOC_WEIGHT', 'cluster_DM_WEIGHT', 'cluster_CENTER_MAG', 'cluster_FIRST_ENG_DENS', 'cluster_cell_dR_min', 'cluster_cell_dR_max', 'cluster_cell_dEta_min', 'cluster_cell_dEta_max', 'cluster_cell_dPhi_min', 'cluster_cell_dPhi_max', 'cluster_cell_centerCellEta', 'cluster_cell_centerCellPhi', 'cluster_cell_centerCellLayer', 'cluster_cellE_norm']
-    defaultBranches = ['clusterIndex', 'truthE', 'nCluster', 'clusterE', 'clusterECalib', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_ENG_CALIB_TOT', 'cluster_ENG_CALIB_OUT_T', 'cluster_ENG_CALIB_DEAD_TOT', 'cluster_EM_PROBABILITY', 'cluster_HAD_WEIGHT', 'cluster_CENTER_MAG', 'cluster_FIRST_ENG_DENS', 'cluster_cellE_norm']
+def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTree', balance_data=True, n_max=-1, verbose=False, load=False, save=False, filename=''):
 
-    if len(branches) == 0: branches = defaultBranches
-    cluster_tree = 'ClusterTree'
-       
-    trees = {
-        rfile: ur.open(inputpath+rfile+'.root')[cluster_tree]
-        for rfile in rootfiles
-    }
+    indices = {}
+    pdata = {}
+    pcells = {}
+    keys = list(root_file_dict.keys())
     
-    pdata = {
-        ifile: pd.DataFrame(itree.arrays(expressions=branches, library='np'))
-        for ifile, itree in trees.items()
-    }
+    pdata_filename = filename + '_frame.h5'
+    pcell_filename = filename + '_images.h5'
     
-#     pdata = {
-#         ifile: itree.pandas.df(branches, flatten=False)
-#         for ifile, itree in trees.items()
+    if(load and pathlib.Path(pdata_filename).exists() and pathlib.Path(pcell_filename).exists()):
+        
+        # Load the DataFrame and images from disk.
+        pdata = {
+            key: pd.read_hdf(pdata_filename,key=key)
+            for key in keys
+        }
+        
+        hf = h5.File(pcell_filename,'r')
+        for key in keys:
+            pcells[key] = {}
+            for layer in layers:
+#                 pcells[key][layer] = hf.get('{}_{}'.format(key,layer)).value # hf['{}:{}'.format(key,layer)]  
+                pcells[key][layer] = hf['{}:{}'.format(key,layer)][:]
+        hf.close()
+        
+    else:
+        if(verbose): print('Preparing pandas DataFrame.')
+        arrays = {
+            key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in branches)
+            for key,rfile_match in root_file_dict.items()        
+        }
+
+        # Create indices for selected clusters.
+        for key in keys: indices[key] = np.full(len(arrays[key]),True,dtype=bool)
+        if(balance_data):
+            rng = np.random.default_rng()
+            n_max_tmp = np.min([len(x) for x in indices.values()])
+            if(n_max > 0): n_max = np.minimum(n_max_tmp, n_max)
+            else: n_max = n_max_tmp
+            
+            indices = {key:rng.choice(len(val), n_max, replace=False) for key,val in indices.items()}
+            for key in indices.keys():
+                msk = np.zeros(len(arrays[key]),dtype=np.bool)
+                msk[indices[key]] = True
+                indices[key] = msk
+        arrays = {
+            key:arrays[key][indices[key]]
+            for key in keys
+        }
+   
+        pdata = {
+            key: ak.to_pandas(arrays[key][branches])
+            for key in keys
+        }
+    
+        arrays = {
+            key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in layers)
+            for key,rfile_match in root_file_dict.items()        
+        }   
+        arrays = {
+            key:arrays[key][indices[key]]
+            for key in keys
+        }
+        
+        nentries = len(keys) * len(layers)
+        i = 0
+        if(verbose): qu.printProgressBarColor (i, nentries, prefix='Preparing calorimeter images.', suffix='% Complete', length=40)
+
+        pcells = {}
+        for key in keys:
+            pcells[key] = {}
+            for layer in layers:
+                pcells[key][layer] = setupCells(arrays[key],layer)
+                i+=1
+                if(verbose): qu.printProgressBarColor (i, nentries, prefix='Preparing calorimeter images.', suffix='% Complete', length=40)
+        
+        if(filename != '' and save):
+            if(verbose): print('Saving DataFrames to {}.'.format(pdata_filename))
+            for key,frame in pdata.items():
+                frame.to_hdf(pdata_filename, key=key, mode='a',complevel=6)   
+                
+            if(verbose): print('Saving calorimeter images to {}.'.format(pcell_filename))
+                
+            hf = h5.File(pcell_filename, 'w')
+            for key in pcells.keys():
+                for layer in layers:
+                    dset = hf.create_dataset('{}:{}'.format(key,layer), data=pcells[key][layer], chunks=True, compression='gzip', compression_opts=7)
+            hf.close()
+                        
+#     # We also want a container for the calorimeter images themselves.
+#     if(verbose): print('Preparing cluster images.')
+#     pcells = {
+#         key: {
+#             layer: setupCells(arrays[key],layer)
+#             for layer in layers
+#         }
+#         for key in arrays.keys()
 #     }
-    return trees, pdata
+    
+    return pdata, pcells
 
 def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', testfrac = 0.2, vallabel='val'):
 
@@ -119,10 +198,9 @@ def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', 
     frame[testlabel]  = frame.index.isin(test_index)
     frame[vallabel]   = frame.index.isin(val_index)
 
-def setupCells(trees, layer, nrows = -1, indices = [], flatten=True):
-    if(type(trees) != list): trees = [trees]
-    array = np.row_stack([tree[layer].array(library='np') for tree in trees])
-
+def setupCells(arrays, layer, nrows = -1, indices = [], flatten=True):
+    if(type(arrays) != list): arrays = [arrays]
+    array = np.row_stack([arr[layer].to_numpy() for arr in arrays])
     if nrows > 0:
         array = array[:nrows]
     elif len(indices) > 0:
