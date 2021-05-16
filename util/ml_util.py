@@ -3,7 +3,7 @@ from sklearn.model_selection import ShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_curve, auc
 import uproot as ur
-from keras import utils
+from tensorflow.keras import utils
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt

@@ -1,6 +1,6 @@
 import os, pickle, pathlib
 import pandas as pd
-from keras.wrappers.scikit_learn import KerasRegressor
+from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
 from tensorflow.keras.models import load_model
 
 # Given sets of input a model filename,
