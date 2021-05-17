@@ -78,7 +78,8 @@ def reshapeSeparateCNN(cells):
 
 def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTree', 
                   balance_data=True, n_max=-1, 
-                  match_distribution='', match_binning=(),
+                  cut_distribution='', cut_value=0., cut_type = 'lower',
+                  match_distribution='', match_binning=(), match_log=False,
                   verbose=False, load=False, save=False, filename=''):
 
     indices = {}
@@ -91,7 +92,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
     pcell_filename = filename + '_images.h5'
     
     if(load and pathlib.Path(pdata_filename).exists() and pathlib.Path(pcell_filename).exists()):
-        
+        if(verbose): print('Loading pandas DataFrame and calo images from {} and {}.'.format(pdata_filename,pcell_filename))
         # Load the DataFrame and images from disk.
         pdata = {
             key: pd.read_hdf(pdata_filename,key=key)
@@ -102,35 +103,51 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         for key in keys:
             pcells[key] = {}
             for layer in layers:
-#                 pcells[key][layer] = hf.get('{}_{}'.format(key,layer)).value # hf['{}:{}'.format(key,layer)]  
                 pcells[key][layer] = hf['{}:{}'.format(key,layer)][:]
         hf.close()
         
     else:
-        if(verbose): print('Preparing pandas DataFrame.')
         arrays = {
             key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in branches)
             for key,rfile_match in root_file_dict.items()        
         }
 
         # Create indices for selected clusters.
-        for key in keys: indices[key] = np.full(len(arrays[key]),True,dtype=bool)
+        # "indices[key]" will hold a list of indices themselves (*not* booleans). E.g. [0, 1, 4, 9]
+        # Thus its length will decrease as we remove events from our selection.
+        for key in keys: indices[key] = np.arange(0,len(arrays[key]))
+        #for key in keys: indices[key] = np.full(len(arrays[key]),True,dtype=bool)
             
-        # Optionally filter out clusters so that our data series match in their distribution of a user-supplied variable.
+        # Filter out clusters that do not pass some cut.
+        if(cut_distribution != ''):
+            if(cut_distribution in branches):
+                for key in keys:                    
+                    if cut_type == 'lower': selected_indices = (arrays[key][cut_distribution] > cut_value)
+                    elif cut_type == 'upper': selected_indices = (arrays[key][cut_distribution] < cut_value)
+                    elif cut_type == 'window': selected_indices = (arrays[key][cut_distribution] > cut_value[0]) * (arrays[key][cut_distribution] < cut_value[1])
+                    else:
+                        print('Warning: Cut type {} not understood.'.format(cut_type))
+                        continue                        
+                    indices[key] = indices[key][selected_indices]
+                    
+            else: print('Warning: Requested cutting on value \"{}\" but this variable is not among the branches you selected from the data. Skipping this step.'.format(cut_distribution)) 
+            
+        # Filter out clusters so that our data series match in their distribution of a user-supplied variable.
+        did_matching = False
         if(match_distribution != ''):
             if(match_distribution in branches and len(match_binning) == 3):
                 if(verbose): print('Matching data series on distribution: {}.'.format(match_distribution))
-                        
+                did_matching = True
+                                                
                 binning = np.linspace(match_binning[1],match_binning[2],match_binning[0]+1)
                 n_bins = len(binning) - 1
                 distributions = {
-                    key: np.histogram(arrays[key][match_distribution].to_numpy(), bins=binning)[0] # only keep bin counts
+                    key: np.histogram(arrays[key][match_distribution][indices[key]].to_numpy(), bins=binning)[0] # only keep bin counts
                     for key in keys
                 }
                 
                 # Now determine how many clusters we keep in each bin, for each key.
                 n_keep = np.zeros(n_bins,dtype=np.dtype('i8'))
-
                 for i in range(n_bins):
                     n_keep[i] = int(np.min([x[i] for x in distributions.values()]))
                     
@@ -138,7 +155,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                 # We will randomly choose which ones we keep, for each match_distribution bin,
                 # for each data series (key).
                 for key in keys:
-                    sorted_indices = np.argsort(arrays[key][match_distribution])
+                    sorted_indices = indices[key][np.argsort(arrays[key][match_distribution][indices[key]])]
                     keep_indices = []
                     bin_idx_edges = np.insert(np.cumsum(distributions[key]),0,0)
                     for i in range(n_bins):
@@ -147,40 +164,47 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                     n_before = len(indices[key])
                     indices[key] = np.hstack(keep_indices)
                     n_after = len(indices[key])
-                    if(verbose): print('\t{}, number of events: {} -> {}'.format(key, n_before, n_after))
-                    
-                    # check distribution
-                    distributions[key] = np.histogram(arrays[key][match_distribution][indices[key]].to_numpy(), bins=binning)[0] # only keep bin counts
-                    
+                    #if(verbose): print('\t{}, number of events: {} -> {}'.format(key, n_before, n_after))
+                                    
             else: print('Warning: Requested matching of distribution \"{}\" but this variable is not among the branches you selected from the data. Skipping this step.'.format(match_distribution))            
             
-        # Optionally balance data so we have equal amounts of each category.
-        if(balance_data):
+        # Balance data so we have equal amounts of each category.
+        # Note that if we did the matching above, we can skip this as
+        # balancing was implicitly done.
+        if(balance_data and not did_matching):
             n_max_tmp = np.min([len(x) for x in indices.values()])
             if(n_max > 0): n_max = np.minimum(n_max_tmp, n_max)
             else: n_max = n_max_tmp
             
+            if(verbose): print('Balancing data: {} events per category.'.format(n_max))
             indices = {key:rng.choice(val, n_max, replace=False) for key,val in indices.items()}
-            for key in indices.keys():
-                msk = np.zeros(len(arrays[key]),dtype=np.bool)
-                msk[indices[key]] = True
-                indices[key] = msk
+
+        # Make a boolean mask from the indices. This speeds things up below, as opposed to passing (unsorted) lists of indices.
+        for key in indices.keys():
+            msk = np.zeros(len(arrays[key]),dtype=np.bool)
+            msk[indices[key]] = True
+            indices[key] = msk
+    
+        # Now, apply our selection indices to the arrays.
         arrays = {
             key:arrays[key][indices[key]]
             for key in keys
         }
         
-        # Making dataframes.
+        # Make the dataframes from the arrays.
+        if(verbose): print('Preparing pandas DataFrame.')
         pdata = {
             key: ak.to_pandas(arrays[key][branches])
             for key in keys
         }
     
+        # Re-make the arrays with just our layer info (using our selection indices again).
         arrays = {
             key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in layers)[indices[key]]
             for key,rfile_match in root_file_dict.items()        
         }   
         
+        # Make our calorimeter images.
         nentries = len(keys) * len(layers)
         i = 0
         if(verbose): qu.printProgressBarColor (i, nentries, prefix='Preparing calorimeter images.', suffix='% Complete', length=40)
@@ -193,6 +217,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                 i+=1
                 if(verbose): qu.printProgressBarColor (i, nentries, prefix='Preparing calorimeter images.', suffix='% Complete', length=40)
         
+        # Save the dataframes and calorimeter images in HDF5 format for easy access next time.
         if(filename != '' and save):
             if(verbose): print('Saving DataFrames to {}.'.format(pdata_filename))
             for key,frame in pdata.items():
@@ -205,16 +230,6 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                 for layer in layers:
                     dset = hf.create_dataset('{}:{}'.format(key,layer), data=pcells[key][layer], chunks=True, compression='gzip', compression_opts=7)
             hf.close()
-                        
-#     # We also want a container for the calorimeter images themselves.
-#     if(verbose): print('Preparing cluster images.')
-#     pcells = {
-#         key: {
-#             layer: setupCells(arrays[key],layer)
-#             for layer in layers
-#         }
-#         for key in arrays.keys()
-#     }
     
     return pdata, pcells
 
