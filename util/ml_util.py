@@ -76,13 +76,17 @@ def reshapeSeparateCNN(cells):
 
     return reshaped
 
-def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTree', balance_data=True, n_max=-1, verbose=False, load=False, save=False, filename=''):
+def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTree', 
+                  balance_data=True, n_max=-1, 
+                  match_distribution='', match_binning=(),
+                  verbose=False, load=False, save=False, filename=''):
 
     indices = {}
     pdata = {}
     pcells = {}
     keys = list(root_file_dict.keys())
-    
+    rng = np.random.default_rng()
+
     pdata_filename = filename + '_frame.h5'
     pcell_filename = filename + '_images.h5'
     
@@ -111,13 +115,52 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
 
         # Create indices for selected clusters.
         for key in keys: indices[key] = np.full(len(arrays[key]),True,dtype=bool)
+            
+        # Optionally filter out clusters so that our data series match in their distribution of a user-supplied variable.
+        if(match_distribution != ''):
+            if(match_distribution in branches and len(match_binning) == 3):
+                if(verbose): print('Matching data series on distribution: {}.'.format(match_distribution))
+                        
+                binning = np.linspace(match_binning[1],match_binning[2],match_binning[0]+1)
+                n_bins = len(binning) - 1
+                distributions = {
+                    key: np.histogram(arrays[key][match_distribution].to_numpy(), bins=binning)[0] # only keep bin counts
+                    for key in keys
+                }
+                
+                # Now determine how many clusters we keep in each bin, for each key.
+                n_keep = np.zeros(n_bins,dtype=np.dtype('i8'))
+
+                for i in range(n_bins):
+                    n_keep[i] = int(np.min([x[i] for x in distributions.values()]))
+                    
+                # Now we need to throw out some clusters -- in other words, only keep some.
+                # We will randomly choose which ones we keep, for each match_distribution bin,
+                # for each data series (key).
+                for key in keys:
+                    sorted_indices = np.argsort(arrays[key][match_distribution])
+                    keep_indices = []
+                    bin_idx_edges = np.insert(np.cumsum(distributions[key]),0,0)
+                    for i in range(n_bins):
+                        index_block = sorted_indices[bin_idx_edges[i]:bin_idx_edges[i+1]] # all indices corresponding to the i'th bin of match_distribution, for this key
+                        keep_indices.append(rng.choice(index_block, n_keep[i], replace=False))
+                    n_before = len(indices[key])
+                    indices[key] = np.hstack(keep_indices)
+                    n_after = len(indices[key])
+                    if(verbose): print('\t{}, number of events: {} -> {}'.format(key, n_before, n_after))
+                    
+                    # check distribution
+                    distributions[key] = np.histogram(arrays[key][match_distribution][indices[key]].to_numpy(), bins=binning)[0] # only keep bin counts
+                    
+            else: print('Warning: Requested matching of distribution \"{}\" but this variable is not among the branches you selected from the data. Skipping this step.'.format(match_distribution))            
+            
+        # Optionally balance data so we have equal amounts of each category.
         if(balance_data):
-            rng = np.random.default_rng()
             n_max_tmp = np.min([len(x) for x in indices.values()])
             if(n_max > 0): n_max = np.minimum(n_max_tmp, n_max)
             else: n_max = n_max_tmp
             
-            indices = {key:rng.choice(len(val), n_max, replace=False) for key,val in indices.items()}
+            indices = {key:rng.choice(val, n_max, replace=False) for key,val in indices.items()}
             for key in indices.keys():
                 msk = np.zeros(len(arrays[key]),dtype=np.bool)
                 msk[indices[key]] = True
@@ -126,20 +169,17 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
             key:arrays[key][indices[key]]
             for key in keys
         }
-   
+        
+        # Making dataframes.
         pdata = {
             key: ak.to_pandas(arrays[key][branches])
             for key in keys
         }
     
         arrays = {
-            key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in layers)
+            key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in layers)[indices[key]]
             for key,rfile_match in root_file_dict.items()        
         }   
-        arrays = {
-            key:arrays[key][indices[key]]
-            for key in keys
-        }
         
         nentries = len(keys) * len(layers)
         i = 0
