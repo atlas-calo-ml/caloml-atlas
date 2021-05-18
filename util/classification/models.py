@@ -13,42 +13,60 @@ from util.keras.layers import *
 # Operates on a single vector (e.g. flattened image from one calorimeter layer).
 # Optionally uses dropouts between layers.
 class baseline_nn_model(): 
-    def __init__(self, strategy, number_pixels, lr=5e-5, dropout=-1):
+    def __init__(self, strategy, number_pixels, lr=5e-5, dropout=-1, normalization=True):
         self.strategy = strategy
         self.dropout = dropout
+        self.normalization = normalization
         self.number_pixels = number_pixels
         self.lr = lr
-        self.custom_objects = {}
-    
+        self.custom_objects = {
+            'NormalizationBlock':NormalizationBlock
+        } 
+        
     # create model
     def model(self):
         dropout = self.dropout
+        normalization = self.normalization
         used_pixels = self.number_pixels
         strategy = self.strategy
         lr = self.lr
-        with strategy.scope():    
-            model = Sequential()
-            model.add(Dense(used_pixels, input_dim=used_pixels, kernel_initializer='normal', activation='relu'))
-            if(self.dropout > 0.): model.add(Dropout(dropout))
-            model.add(Dense(used_pixels, activation='relu'))
-            if(self.dropout > 0.): model.add(Dropout(dropout))
-            model.add(Dense(int(used_pixels/2), activation='relu'))
-            if(self.dropout > 0.): model.add(Dropout(dropout))
-            model.add(Dense(2, kernel_initializer='normal', activation='softmax'))
-            # compile model
+        with strategy.scope():                
+            X_in = Input((used_pixels),name='input')
+            X = X_in
+                        
+            # If requested, normalize the flattened input images to integrate to one.
+            # This removes any information on the energy scale that may be in the input images.
+            if(normalization): X = NormalizationBlock(axes=[1])(X)
+                
+            X = Dense(used_pixels, kernel_initializer='normal',activation='relu')(X)
+            if(dropout > 0.): X = Dropout(dropout)(X)
+                
+            X = Dense(used_pixels, activation='relu')(X)
+            if(dropout > 0.): X = Dropout(dropout)(X)
+                
+            X = Dense(int(used_pixels/2), activation='relu')(X)
+            if(dropout > 0.): X = Dropout(dropout)(X)
+
+            X = Dense(2, kernel_initializer='normal', activation='softmax')(X)
+            
+            # compile the model
+            model = Model(inputs=X_in, outputs=X, name='base_nn')
             optimizer = Adam(lr=lr)
             model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 
 # A "simple" convolutional neural network (CNN). Uses a single calo image.
 class baseline_cnn_model():
-    def __init__(self, input_shape, f, pool, lr=5e-5, augmentation=True):
+    def __init__(self, input_shape, f, pool, lr=5e-5, augmentation=True, normalization=True):
         self.lr = lr
         self.input_shape = tuple(list(input_shape) + [1])
         self.f = f
         self.pool = pool
         self.augmentation = augmentation
-        self.custom_objects = {}
+        self.normalization = normalization
+        self.custom_objects = {
+            'NormalizationBlock': NormalizationBlock
+        }
         
     def model(self):
         lr = self.lr
@@ -56,11 +74,17 @@ class baseline_cnn_model():
         f = self.f
         pool = self.pool
         augmentation = self.augmentation
+        normalization = self.normalization
         
         X_in = Input(input_shape,name='input')
+        
         # Augmentation: randomly flip the image during training
         if(augmentation): X = RandomFlip(name='aug_reflect')(X_in)
         else: X = X_in
+            
+        # Normalization: Rescale the image to have an integral of 1
+        if(normalization): X = NormalizationBlock(axes=[1,2])(X)
+                
         X = Conv2D(32, f, name='conv1', activation='relu')(X)            
         #temp_pool = (2,2) #TODO: Including this pooling caused model to fail to compile. Did this work in original CNN notebook w/ original parameter choices?
         #X = MaxPooling2D(temp_pool)(X)            
@@ -79,19 +103,25 @@ class baseline_cnn_model():
 # A model that uses all 3 EMB layers (as separate, 1-channel images).
 # As a result, the input shapes are hard-coded.
 class emb_cnn_model():
-    def __init__(self, lr=5e-5, augmentation=True):
+    def __init__(self, lr=5e-5, augmentation=True, normalization=True):
         self.lr = lr
         self.augmentation = augmentation
-        self.custom_objects = {}
+        self.normalization = normalization
+        self.custom_objects = {
+            'NormalizationBlock': NormalizationBlock
+        }
         
     def model(self):
         lr = self.lr
         augmentation = self.augmentation
+        normalization = self.normalization
         
         # EMB1 image (convolutional)
         input0 = Input(shape=(128, 4, 1), name='EMB1')
-        if(augmentation): X0 = RandomFlip(name='aug_reflect_0')(input0)
+        if(augmentation): X0 = RandomFlip(name='aug_reflect_0')(input0)            
         else: X0 = input0
+            
+        if(normalization): X0 = NormalizationBlock(axes=[1,2])(X0)
         X0 = Conv2D(32, (4, 2), activation='relu')(X0)
         X0 = MaxPooling2D(pool_size=(2, 2))(X0)
         X0 = Dropout(0.2)(X0)
@@ -102,6 +132,8 @@ class emb_cnn_model():
         input1 = Input(shape=(16, 16, 1), name='EMB2')
         if(augmentation): X1 = RandomFlip(name='aug_reflect_1')(input1)
         else: X1 = input1
+            
+        if(normalization): X1 = NormalizationBlock(axes=[1,2])(X1)
         X1 = Conv2D(32, (4, 4), activation='relu')(X1)
         X1 = MaxPooling2D(pool_size=(2, 2))(X1)
         X1 = Dropout(0.2)(X1)
@@ -112,6 +144,8 @@ class emb_cnn_model():
         input2 = Input(shape=(8, 16, 1), name='EMB3')
         if(augmentation): X2 = RandomFlip(name='aug_reflect_2')(input2)
         else: X2 = input2
+            
+        if(normalization): X2 = NormalizationBlock(axes=[1,2])(X2)
         X2 = Conv2D(32, (2, 4), activation='relu')(X2)
         X2 = MaxPooling2D(pool_size=(2, 2))(X2)
         X2 = Dropout(0.2)(X2)
@@ -134,19 +168,25 @@ class emb_cnn_model():
 # A model that uses all 6 calo layers (as separate, 1-channel images).
 # As a result, the input shapes are hard-coded.
 class all_cnn_model():
-    def __init__(self, lr=5e-5, augmentation=True):
+    def __init__(self, lr=5e-5, augmentation=True, normalization=True):
         self.lr = lr
         self.augmentation = augmentation
-        self.custom_objects = {}
+        self.normalization = normalization
+        self.custom_objects = {
+            'NormalizationBlock': NormalizationBlock
+        }
         
     def model(self):
         lr = self.lr
         augmentation = self.augmentation
+        normalization = self.normalization
         
         # EMB1 image (convolutional)
         input0 = Input(shape=(128, 4, 1), name='EMB1')
         if(augmentation): X0 = RandomFlip(name='aug_reflect_0')(input0)
         else: X0 = input0
+        
+        if(normalization): X0 = NormalizationBlock(axes=[1,2])(X0)
         X0 = Conv2D(32, (4, 2), activation='relu')(X0)
         X0 = MaxPooling2D(pool_size=(2, 2))(X0)
         X0 = Dropout(0.2)(X0)
@@ -157,6 +197,8 @@ class all_cnn_model():
         input1 = Input(shape=(16, 16, 1), name='EMB2')
         if(augmentation): X1 = RandomFlip(name='aug_reflect_1')(input1)
         else: X1 = input1
+
+        if(normalization): X1 = NormalizationBlock(axes=[1,2])(X1)
         X1 = Conv2D(32, (4, 4), activation='relu')(X1)
         X1 = MaxPooling2D(pool_size=(2, 2))(X1)
         X1 = Dropout(0.2)(X1)
@@ -167,6 +209,8 @@ class all_cnn_model():
         input2 = Input(shape=(8, 16, 1), name='EMB3')
         if(augmentation): X2 = RandomFlip(name='aug_reflect_2')(input2)
         else: X2 = input2
+        
+        if(normalization): X2 = NormalizationBlock(axes=[1,2])(X2)
         X2 = Conv2D(32, (2, 4), activation='relu')(X2)
         X2 = MaxPooling2D(pool_size=(2, 2))(X2)
         X2 = Dropout(0.2)(X2)
@@ -177,6 +221,8 @@ class all_cnn_model():
         input3 = Input(shape=(4,4,1), name='TileBar0')
         if(augmentation): X3 = RandomFlip(name='aug_reflect_3')(input3)
         else: X3 = input3
+        
+        if(normalization): X3 = NormalizationBlock(axes=[1,2])(X3)
         X3 = Conv2D(32, (2,2), activation='relu')(X3)
         X3 = MaxPooling2D(pool_size=(2,2))(X3)
         X3 = Dropout(0.2)(X3)
@@ -187,6 +233,8 @@ class all_cnn_model():
         input4 = Input(shape=(4,4,1), name='TileBar1')
         if(augmentation): X4 = RandomFlip(name='aug_reflect_4')(input4)
         else: X4 = input4
+        
+        if(normalization): X4 = NormalizationBlock(axes=[1,2])(X4)
         X4 = Conv2D(32, (2,2), activation='relu')(X4)
         X4 = MaxPooling2D(pool_size=(2,2))(X4)
         X4 = Dropout(0.2)(X4)
@@ -197,6 +245,8 @@ class all_cnn_model():
         input5 = Input(shape=(2,4,1), name='TileBar2')
         if(augmentation): X5 = RandomFlip(name='aug_reflect_5')(input5)
         else: X5 = input5
+        
+        if(normalization): X5 = NormalizationBlock(axes=[1,2])(X5)
         X5 = Conv2D(32, (2,2), activation='relu')(X5)
         X5 = MaxPooling2D(pool_size=(1,2))(X5)
         X5 = Dropout(0.2)(X5)
@@ -219,13 +269,15 @@ class all_cnn_model():
 # A simple CNN, that uses 6-channel images.
 # Each set of images is appropriately rescaled so that their dimensions match.
 class merged_cnn_model():
-    def __init__(self, input_shape, lr=5e-5, dropout=-1., augmentation=True):
+    def __init__(self, input_shape, lr=5e-5, dropout=-1., augmentation=True, normalization=True):
         self.lr = lr
         self.input_shape = input_shape
         self.dropout = dropout
         self.augmentation = augmentation
+        self.normalization = normalization
         self.custom_objects = {
-            'ImageScaleBlock':ImageScaleBlock
+            'ImageScaleBlock':ImageScaleBlock,
+            'NormalizationBlock':NormalizationBlock
         } 
         
     def model(self):
@@ -233,6 +285,7 @@ class merged_cnn_model():
         lr = self.lr
         dropout = self.dropout
         augmentation = self.augmentation
+        normalization = self.normalization
         
         # Input images from all calorimeter layers.
         input0 = Input(shape=(128, 4, 1), name='EMB1'    )
@@ -246,8 +299,10 @@ class merged_cnn_model():
         # Rescale all our images.
         X = ImageScaleBlock(input_shape,normalization=True, name_prefix='scaled_input_')(inputs)
         if(augmentation): X = RandomFlip(name='aug_reflect')(X)
+        if(normalization): X = NormalizationBlock(axes=[1,2,3])(X)
+
         X = ZeroPadding2D((3,3))(X)
-        
+                
         X = Conv2D(32, (int(input_shape[0]/4), int(input_shape[1]/4)), activation='relu')(X)
         X = MaxPooling2D(pool_size=(2, 2))(X)
         if(dropout > 0.): X = Dropout(dropout)(X)
@@ -263,14 +318,16 @@ class merged_cnn_model():
 # A CNN that uses two 3-channel images,
 # one corresponding with EMB and the other with TileBar.
 class merged_cnn_2p_model():
-    def __init__(self, input_shape1, input_shape2, lr=5e-5, dropout=-1., augmentation=True):
+    def __init__(self, input_shape1, input_shape2, lr=5e-5, dropout=-1., augmentation=True, normalization=True):
         self.lr = lr
         self.input_shape1 = input_shape1
         self.input_shape2 = input_shape2
         self.dropout = dropout
         self.augmentation = augmentation
+        self.normalization = normalization
         self.custom_objects = {
-            'ImageScaleBlock':ImageScaleBlock
+            'ImageScaleBlock':ImageScaleBlock,
+            'NormalizationBlock':NormalizationBlock
         } 
 
     def model(self):
@@ -296,6 +353,7 @@ class merged_cnn_2p_model():
             input_shape = input_shapes[i]
             X = ImageScaleBlock(input_shape,normalization=True, name_prefix='scaled_input_')(inputs)
             if(augmentation): X = RandomFlip(name='aug_reflect_{}'.format(i))(X)
+            if(normalization): X = NormalizationBlock(axes=[1,2,3])(X)
             X = ZeroPadding2D((3,3))(X)
             X = Conv2D(32, (int(input_shape[0]/4), int(input_shape[1]/4)), activation='relu')(X)
             X = MaxPooling2D(pool_size=(2, 2))(X)
@@ -331,7 +389,8 @@ class resnet():
         self.custom_objects = {
             'ImageScaleBlock':ImageScaleBlock,
             'ConvolutionBlock':ConvolutionBlock,
-            'IdentityBlock':IdentityBlock
+            'IdentityBlock':IdentityBlock,
+            'NormalizationBlock':NormalizationBlock
         }
     
     # create model
@@ -351,9 +410,9 @@ class resnet():
         inputs = [Input((None,None,1),name='input'+str(i)) for i in range(channels)]
 
         # Rescale all the input images, so that their dimensions now match.
-        # Note that we make sure to re-normalize the images so that we preserve their energies.
         X = ImageScaleBlock(input_shape,normalization=True,name_prefix='scaled_input_')(inputs)
-        #X = image_scale_block(inputs, input_shape, normalization=normalization, name_prefix = 'scaled_input_')
+        if(normalization): X = NormalizationBlock(axes=[1,2,3])(X)
+
         X = ZeroPadding2D((3,3))(X)
 
         # Data augmentation.

@@ -211,3 +211,32 @@ class ImageScaleBlock(layers.Layer):
             }
         )
         return config
+    
+# A simple layer for normalizing a tensor's integral.
+class NormalizationBlock(layers.Layer):
+    def __init__(self, axes, scaling=1.0, name_prefix='normalization_', **kwargs):
+        super(NormalizationBlock, self).__init__(**kwargs) # god knows what this does...
+        
+        # retrieve attributes
+        self.axes = axes
+        self.scaling = scaling
+        self.name_prefix = name_prefix
+        
+    def call(self, inputs):
+        
+        integral = tf.math.reduce_sum(inputs,axis=self.axes)
+        integral = tf.where(tf.equal(integral, 0), tf.ones_like(integral), integral) # avoid division by zero      
+        for i in range(len(self.axes)):
+            integral = tf.expand_dims(integral,axis=1)
+        return tf.math.multiply(self.scaling, tf.math.divide(inputs,integral))
+            
+    def get_config(self):
+        config = super(NormalizationBlock, self).get_config()
+        config.update(
+            {
+                'axes':self.axes,
+                'scaling':self.scaling,
+                'name_prefix': self.name_prefix
+            }
+        )
+        return config

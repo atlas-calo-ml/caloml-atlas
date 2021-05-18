@@ -133,11 +133,9 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
             else: print('Warning: Requested cutting on value \"{}\" but this variable is not among the branches you selected from the data. Skipping this step.'.format(cut_distribution)) 
             
         # Filter out clusters so that our data series match in their distribution of a user-supplied variable.
-        did_matching = False
         if(match_distribution != ''):
             if(match_distribution in branches and len(match_binning) == 3):
                 if(verbose): print('Matching data series on distribution: {}.'.format(match_distribution))
-                did_matching = True
                                                 
                 binning = np.linspace(match_binning[1],match_binning[2],match_binning[0]+1)
                 n_bins = len(binning) - 1
@@ -169,9 +167,10 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
             else: print('Warning: Requested matching of distribution \"{}\" but this variable is not among the branches you selected from the data. Skipping this step.'.format(match_distribution))            
             
         # Balance data so we have equal amounts of each category.
-        # Note that if we did the matching above, we can skip this as
-        # balancing was implicitly done.
-        if(balance_data and not did_matching):
+        # Note that if we did the matching above, we can potentially skip this as
+        # balancing was implicitly done. However, we might want to take the opportunity
+        # to further slim down our dataset.
+        if(balance_data):
             n_max_tmp = np.min([len(x) for x in indices.values()])
             if(n_max > 0): n_max = np.minimum(n_max_tmp, n_max)
             else: n_max = n_max_tmp
