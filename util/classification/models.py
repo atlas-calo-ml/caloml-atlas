@@ -335,6 +335,7 @@ class merged_cnn_2p_model():
         lr = self.lr
         dropout = self.dropout
         augmentation = self.augmentation
+        normalization = self.normalization
         
         # Input images from all calorimeter layers.
         input0 = Input(shape=(128, 4, 1), name='EMB1'    )

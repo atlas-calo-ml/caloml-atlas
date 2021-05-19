@@ -78,7 +78,7 @@ def reshapeSeparateCNN(cells):
 
 def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTree', 
                   balance_data=True, n_max=-1, 
-                  cut_distribution='', cut_value=0., cut_type = 'lower',
+                  cut_distributions=[], cut_values=[], cut_types=[],
                   match_distribution='', match_binning=(), match_log=False,
                   verbose=False, load=False, save=False, filename=''):
 
@@ -119,19 +119,23 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         #for key in keys: indices[key] = np.full(len(arrays[key]),True,dtype=bool)
             
         # Filter out clusters that do not pass some cut.
-        if(cut_distribution != ''):
-            if(cut_distribution in branches):
-                for key in keys:                    
-                    if cut_type == 'lower': selected_indices = (arrays[key][cut_distribution] > cut_value)
-                    elif cut_type == 'upper': selected_indices = (arrays[key][cut_distribution] < cut_value)
-                    elif cut_type == 'window': selected_indices = (arrays[key][cut_distribution] > cut_value[0]) * (arrays[key][cut_distribution] < cut_value[1])
+        if(cut_distributions != []):
+            selected_indices = {key: np.full(len(arrays[key]),True,dtype=np.bool) for key in keys}
+            
+            for i, cut_distrib in enumerate(cut_distributions):
+                if(verbose): print('Applying cut on distribution: {}.'.format(cut_distrib))
+                cut_value = cut_values[i]
+                cut_type = cut_types[i]
+                for key in keys:
+                    if cut_type == 'lower': sel = (arrays[key][cut_distrib] > cut_value)
+                    elif cut_type == 'upper': sel = (arrays[key][cut_distrib] < cut_value)
+                    elif cut_type == 'window': sel = (arrays[key][cut_distrib] > cut_value[0]) * (arrays[key][cut_distrib] < cut_value[1])
                     else:
                         print('Warning: Cut type {} not understood.'.format(cut_type))
-                        continue                        
-                    indices[key] = indices[key][selected_indices]
-                    
-            else: print('Warning: Requested cutting on value \"{}\" but this variable is not among the branches you selected from the data. Skipping this step.'.format(cut_distribution)) 
-            
+                        continue 
+                    selected_indices[key] *= sel.to_numpy()
+            indices = {key:val[selected_indices[key]] for key,val in indices.items()}
+                                
         # Filter out clusters so that our data series match in their distribution of a user-supplied variable.
         if(match_distribution != ''):
             if(match_distribution in branches and len(match_binning) == 3):
