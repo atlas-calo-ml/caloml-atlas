@@ -15,14 +15,16 @@ from util.keras.layers import *
 # A network that uses a combo of CNN and "simpler" functionalities.
 # For simplicity, it just takes CNN-style input (images).
 class exp_cnn_model():
-    def __init__(self, input_shape, kernel=(3,3), lr=5e-5, dropout=-1., augmentation=True):
+    def __init__(self, input_shape, kernel=(3,3), lr=5e-5, dropout=-1., augmentation=True, normalization=True):
         self.lr = lr
         self.input_shape = input_shape
         self.kernel = kernel
         self.dropout = dropout
         self.augmentation = augmentation
+        self.normalization = normalization
         self.custom_objects = {
-            'ImageScaleBlock':ImageScaleBlock
+            'ImageScaleBlock':ImageScaleBlock,
+            'NormalizationBlock':NormalizationBlock
         } 
         
     def model(self):
@@ -31,6 +33,7 @@ class exp_cnn_model():
         lr = self.lr
         dropout = self.dropout
         augmentation = self.augmentation
+        normalization = self.normalization
         
         # Input images from all calorimeter layers.
         input0 = Input(shape=(128, 4, 1), name='EMB1'    )
@@ -44,6 +47,8 @@ class exp_cnn_model():
         # Rescale our EMB images, and pass them through convolutions.
         EMB = ImageScaleBlock(input_shape,normalization=True, name_prefix='scaled_input_')([input0,input1,input2])
         if(augmentation): EMB = RandomFlip(name='aug_reflect')(EMB)
+        if(normalization): EMB = NormalizationBlock(axes=[1,2,3])(EMB)
+            
         EMB = ZeroPadding2D((3,3))(EMB)
         EMB = Conv2D(32, kernel, activation='relu')(EMB)
         EMB = MaxPooling2D(pool_size=(2,2))(EMB)
@@ -53,6 +58,7 @@ class exp_cnn_model():
         # Using ImageScaleBlock with final size of (1,1) will give us a list of integrals of the images.
         TiB = ImageScaleBlock((1,1),normalization=True, name_prefix='scaled_input_TiB_')([input3,input4,input5])
         TiB = Flatten()(TiB)
+        if(normalization): TiB = NormalizationBlock(axes=[1])(TiB)
         
         X = Concatenate(axis=1)([EMB,TiB])
         X = Dense(128, activation='relu')(X)

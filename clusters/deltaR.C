@@ -74,6 +74,9 @@ void MakeTree(TString input_file, TString output_file){
     ROOT::Math::PtEtaPhiEVector* v1 = new ROOT::Math::PtEtaPhiEVector();
     ROOT::Math::PtEtaPhiEVector* v2 = new ROOT::Math::PtEtaPhiEVector();
     
+    std::vector<Float_t> dR_vals;
+    std::vector<Int_t> k_vals;
+    
     for(Long64_t i = 0; i < nevents; i++){
         et_reader.SetEntry(i);
         
@@ -86,12 +89,12 @@ void MakeTree(TString input_file, TString output_file){
             clus_Eta = *cluster_Eta;
             clus_Phi = *cluster_Phi;
 
-            std::vector<Float_t> dR_vals;
-            std::vector<Int_t> k_vals;
+            dR_vals.clear();
+            k_vals.clear();
 
             for(Int_t k = 0; k < n_truth; k++){
                 if(truthPartStatus.At(k) < 0) continue;
-                v1->SetCoordinates(0.,clus_E, clus_Phi, 0.);
+                v1->SetCoordinates(0.,clus_Eta, clus_Phi, 0.);
                 v2->SetCoordinates(0., truthPartEta.At(k), truthPartPhi.At(k), 0.);
                 dR_vals.push_back(ROOT::Math::VectorUtil::DeltaR(*v1,*v2));
                 k_vals.push_back(k); // keeping track of index since we have the skip condition above
@@ -105,6 +108,7 @@ void MakeTree(TString input_file, TString output_file){
             truth_Eta = truthPartEta.At(truth_index);
             truth_Phi = truthPartPhi.At(truth_index);
             truth_Pdg = truthPartPdgId.At(truth_index);
+                        
             t->Fill();
         }
     }
