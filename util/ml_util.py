@@ -236,26 +236,61 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
     
     return pdata, pcells
 
-def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', testfrac = 0.2, vallabel='val'):
+def splitFrameTVT(frame,
+                  trainlabel='train', trainfrac=0.8, 
+                  testlabel='test', testfrac=0.2, 
+                  vallabel='val',
+                  key = 'None',
+                  filename=''):
 
-    valfrac = 1.0 - trainfrac - testfrac
+    compute_indices = True
     
-    train_split = ShuffleSplit(n_splits=1, test_size=testfrac + valfrac, random_state=0)
-    # advance the generator once with the next function
-    train_index, testval_index = next(train_split.split(frame))  
+    # Optionally load indices, if the requested file exists and the appropriate key can be found in it.
+    if(filename != '' and pathlib.Path(filename).exists()):
+        f = h5.File(filename,'r')
+        search_keys = ['{}_'.format(key) + x for x in ['train','test','valid']]
+        f_keys = list(f.keys())
+        matches = [(x in f_keys) for x in search_keys]
+        
+        if(False in matches):
+            if(True in matches): print('Warning: Some but not all indices found for key {}. Remaking these indices.'.format(key))
+            compute_indices = True
+        else:
+            print('Loading indices for key {} from {}.'.format(key,filename))
+            train_index = f['{}_train'.format(key)][:]
+            test_index = f['{}_test'.format(key)  ][:]
+            val_index = f['{}_valid'.format(key)  ][:]
+            compute_indices = False
+        f.close()
+        
+    if(compute_indices):
+        valfrac = 1.0 - trainfrac - testfrac
 
-    if valfrac > 0:
-        testval_split = ShuffleSplit(
-            n_splits=1, test_size=valfrac / (valfrac+testfrac), random_state=0)
-        test_index, val_index = next(testval_split.split(testval_index)) 
-    else:
-        test_index = testval_index
-        val_index = []
+        train_split = ShuffleSplit(n_splits=1, test_size=testfrac + valfrac, random_state=0)
+        # advance the generator once with the next function
+        train_index, testval_index = next(train_split.split(frame))  
+
+        if valfrac > 0:
+            testval_split = ShuffleSplit(
+                n_splits=1, test_size=valfrac / (valfrac+testfrac), random_state=0)
+            test_index, val_index = next(testval_split.split(testval_index)) 
+        else:
+            test_index = testval_index
+            val_index = []
         
     frame[trainlabel] = frame.index.isin(train_index)
     frame[testlabel]  = frame.index.isin(test_index)
     frame[vallabel]   = frame.index.isin(val_index)
-
+        
+    # Optionally save indices
+    if(filename != '' and not pathlib.Path(filename).exists()):
+        f = h5.File(filename,'w')
+        dset_train = f.create_dataset('{}_train'.format(key), data=train_index, chunks=True, compression='gzip', compression_opts=5)
+        dset_test  = f.create_dataset('{}_test'.format(key),  data=test_index,  chunks=True, compression='gzip', compression_opts=5)
+        dset_val   = f.create_dataset('{}_valid'.format(key), data=val_index,   chunks=True, compression='gzip', compression_opts=5)
+        f.close()
+    return
+        
 def setupCells(arrays, layer, nrows = -1, indices = [], flatten=True):
     if(type(arrays) != list): arrays = [arrays]
     array = np.row_stack([arr[layer].to_numpy() for arr in arrays])

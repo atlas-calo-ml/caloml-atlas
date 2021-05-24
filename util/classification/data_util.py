@@ -4,23 +4,21 @@ from tensorflow.keras.utils import to_categorical
 from util import ml_util as mu
 
 # Basic data preparation.
-def DataPrep(pdata, pcells, layers, trainfrac=0.7):
+def DataPrep(pdata, pcells, layers, trainfrac=0.7, filename=''):
     
     # create train/validation/test subsets containing 70%/10%/20%
     # of events from each type of pion event
     for p_index, plabel in enumerate(pdata.keys()):
-        mu.splitFrameTVT(pdata[plabel],trainfrac=0.7)
+        mu.splitFrameTVT(pdata[plabel],trainfrac=trainfrac,key=plabel,filename='{}_indices.h5'.format(filename))
         pdata[plabel]['label'] = p_index
 
     # merge pi0 and pi+ events
     pdata_merged = pd.concat([pdata[ptype] for ptype in pdata.keys()])
     pcells_merged = {
-        layer : np.concatenate([pcells[ptype][layer]
-                                for ptype in pdata.keys()])
+        layer : np.concatenate([pcells[ptype][layer] for ptype in pdata.keys()])
         for layer in layers
     }
     plabels = to_categorical(pdata_merged['label'],len(pdata.keys())) # higher score -> more likely to be charged
-    
     return pdata_merged, pcells_merged, plabels
 
 def ReshapeImages(pcells_merged, cell_shapes, use_layer_names=False, keys=[]):
