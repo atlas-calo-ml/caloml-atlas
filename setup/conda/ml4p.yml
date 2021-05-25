@@ -307,5 +307,5 @@ dependencies:
   - zstandard=0.15.2=py38h497a2fe_0
   - zstd=1.4.9=ha95c52a_0
   - pip:
-    - "--editable=git+https://github.com/google/qkeras.git@7a9a3a5ea74a6342ef2875774f68bdcad88d698e#egg=QKeras"
+    - "--editable=git+https://github.com/google/qkeras.git@bc7b0ee31b495d1b3bbef3ebdef7590fca4e221d#egg=QKeras"
 prefix: /local/home/jano/miniconda3/envs/ml4p
