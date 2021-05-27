@@ -172,5 +172,5 @@ class exp_merged_model():
         model = Model(inputs = [EMB1, EMB2, EMB3, TB0, TB1, TB2], outputs = [output])
         # compile model
         optimizer = Adam(lr=lr)
-        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
