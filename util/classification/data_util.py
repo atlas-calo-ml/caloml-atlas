@@ -6,8 +6,9 @@ from util import ml_util as mu
 # Basic data preparation.
 def DataPrep(pdata, pcells, layers, trainfrac=0.7, filename=''):
     
-    # create train/validation/test subsets containing 70%/10%/20%
-    # of events from each type of pion event
+    # Create train/validation/test subsets containing 70%/10%/20%
+    # of events from each type of pion event.
+    # The resulting indices are stored within the DataFrames! (To use these for the pcells arrays, you must consult the DataFrame).
     for p_index, plabel in enumerate(pdata.keys()):
         mu.splitFrameTVT(pdata[plabel],trainfrac=trainfrac,key=plabel,filename='{}_indices.h5'.format(filename))
         pdata[plabel]['label'] = p_index

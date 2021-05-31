@@ -234,7 +234,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                     dset = hf.create_dataset('{}:{}'.format(key,layer), data=pcells[key][layer], chunks=True, compression='gzip', compression_opts=7)
             hf.close()
     
-    return pdata, pcells
+    return pdata, pcells    
 
 def splitFrameTVT(frame,
                   trainlabel='train', trainfrac=0.8, 
@@ -273,7 +273,12 @@ def splitFrameTVT(frame,
         if valfrac > 0:
             testval_split = ShuffleSplit(
                 n_splits=1, test_size=valfrac / (valfrac+testfrac), random_state=0)
-            test_index, val_index = next(testval_split.split(testval_index)) 
+            test_index, val_index = next(testval_split.split(testval_index))
+            
+            # test_index & val_index give indices w.r.t. testval_index, need to convert these
+            test_index = testval_index[test_index]
+            val_index = testval_index[val_index]
+            
         else:
             test_index = testval_index
             val_index = []
@@ -281,13 +286,17 @@ def splitFrameTVT(frame,
     frame[trainlabel] = frame.index.isin(train_index)
     frame[testlabel]  = frame.index.isin(test_index)
     frame[vallabel]   = frame.index.isin(val_index)
-        
-    # Optionally save indices
-    if(filename != '' and not pathlib.Path(filename).exists()):
-        f = h5.File(filename,'w')
-        dset_train = f.create_dataset('{}_train'.format(key), data=train_index, chunks=True, compression='gzip', compression_opts=5)
-        dset_test  = f.create_dataset('{}_test'.format(key),  data=test_index,  chunks=True, compression='gzip', compression_opts=5)
-        dset_val   = f.create_dataset('{}_valid'.format(key), data=val_index,   chunks=True, compression='gzip', compression_opts=5)
+
+    # Save indices, if they are not already present.
+    if(filename != ''):
+        f = h5.File(filename,'a')
+        f_keys = list(f.keys())
+        write_keys = [x.format(key) for x in ['{}_train','{}_test','{}_valid']]
+        indices = [train_index, test_index, val_index]
+        for i,wkey in enumerate(write_keys):
+            if(wkey in f_keys): continue
+#             print('\tWriting index: {}'.format(wkey))
+            dset = f.create_dataset(wkey, data=indices[i], chunks=True, compression='gzip', compression_opts=5)
         f.close()
     return
         

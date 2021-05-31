@@ -13,7 +13,13 @@ import tensorflow as tf
 from util.keras.layers import ImageScaleBlock
 
 # Create plots of accuracy and loss.
-def MetricPlot(model_history, acc_range=(0.5,1.), loss_range=(0.,0.7), acc_log=False, loss_log=False, plotpath='/', model_keys=[], plotstyle=qu.PlotStyle('dark')):
+def MetricPlot(model_history, 
+               acc_range=(0.5,1.), loss_range=(0.,0.7), 
+               acc_log=False, loss_log=False, 
+               plotpath='/', 
+               model_keys=[], 
+               plotstyle=qu.PlotStyle('dark')):
+    
     if(model_keys == []): model_keys = list(model_history.keys())
     for model_key in model_keys:
         fig, ax = plt.subplots(1,2,figsize=(15,5))
@@ -60,7 +66,16 @@ def MetricPlot(model_history, acc_range=(0.5,1.), loss_range=(0.,0.7), acc_log=F
     return
 
 # Create ROC curves. Note that some of the arguments are dictionaries, that get modified.
-def RocCurves(model_scores, data_labels, roc_fpr, roc_tpr, roc_thresh, roc_auc, indices=[], plotpath = '/', plotname = 'ROC', model_keys = [], drawPlots=True, figsize=(15,5), plotstyle=qu.PlotStyle('dark')):
+def RocCurves(model_scores, 
+              data_labels, 
+              roc_fpr, roc_tpr, 
+              roc_thresh, roc_auc, 
+              indices=[], 
+              plotpath = '/', plotname = 'ROC', 
+              model_keys = [], 
+              drawPlots=True, figsize=(15,5), 
+              plotstyle=qu.PlotStyle('dark')):
+    
     if(model_keys == []): model_keys = list(model_scores.keys())
     if(len(indices) != len(data_labels)):  indices = np.full(len(data_labels), True, dtype=np.dtype('bool'))
         

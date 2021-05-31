@@ -4,7 +4,8 @@ from tensorflow.keras import Model # not sure if really needed?
 from tensorflow.keras.models import load_model
 
 # Given some input, indices, and a model filename,
-# train an instance of the given model.
+# train an instance of the given model,
+# or load the model if it already exists.
 def TrainNetwork(model, 
                  modelfile, 
                  x_train, y_train, 
