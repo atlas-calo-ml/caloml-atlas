@@ -49,7 +49,7 @@ class baseline_nn_model():
 # A simple, fully-connected network architecture.
 # Inputs correspond to the reco energy, eta, as well as a vector
 # encoding the percentage of energy deposited in each calorimeter layer.
-class simple_dnn():
+class depth_network():
     def __init__(self, strategy, lr=5e-5, decay=1e-6, dropout=-1):
         self.strategy = strategy
         self.dropout = dropout
@@ -81,7 +81,129 @@ class simple_dnn():
             model = Model(inputs=input_list, outputs=X, name='Simple')
             model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model    
-    
+
+
+# Based on our split_EMB classification model (which is based on Max's code),
+# with a few changes made for regression.
+class split_emb_cnn():
+    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1, augmentation=True):
+        self.dropout = dropout
+        self.decay = decay
+        self.lr = lr
+        self.augmentation = augmentation
+        self.custom_objects = {
+            'ImageScaleBlock':ImageScaleBlock
+        }
+        
+    # create model
+    def model(self):
+        dropout = self.dropout
+        decay = self.decay
+        lr = self.lr
+        augmentation = self.augmentation
+        # Gather inputs -- the images, the reco energy and eta.
+        EMB1   = Input(shape=(128, 4,1), name='input_0')
+        EMB2   = Input(shape=( 16,16,1), name='input_1')
+        EMB3   = Input(shape=(  8,16,1), name='input_2')
+        TB0    = Input(shape=(  4, 4,1), name='input_3')
+        TB1    = Input(shape=(  4, 4,1), name='input_4')
+        TB2    = Input(shape=(  2, 4,1), name='input_5')
+        energy = Input(shape=(1),        name='energy' )
+        eta    = Input(shape=(1),        name='eta'    )
+        input_list = [EMB1, EMB2, EMB3, TB0, TB1, TB2, energy, eta]
+        
+        # Combine some of the images.
+        input1 = EMB1
+        input2 = ImageScaleBlock((16,16),normalization=True, name_prefix='emb_stack')([EMB2, EMB3]) # merge EMB2 and EMB3
+        input3 = ImageScaleBlock((4,4),normalization=True, name_prefix='tiles_stack')([TB0, TB1, TB2]) # merge TileBar
+                
+        # EMB1 image (convolutional)
+        x1 = Conv2D(32, (3, 3), padding='same', name='emb1_conv2d_1')(input1)
+        x1 = Activation('relu')(x1)
+
+        x1 = Conv2D(32, (3, 3), padding='same', name='emb1_conv2d_2')(x1)
+        x1 = Activation('relu')(x1)
+        x1 = MaxPooling2D(pool_size=(2, 1), padding='same', name='emb1_maxpool_3')(x1)
+        x1 = Conv2D(64, (3, 3), padding='same', name='emb1_conv2d_3')(x1)
+        x1 = Activation('relu')(x1)
+
+        x1 = MaxPooling2D(pool_size=(2, 1), padding='same', name='emb1_maxpool_4')(x1)
+        x1 = Flatten(name='emb1_flatten_5')(x1)
+        x1 = Dense(64, activation='relu', name='emb1_dense_6')(x1) # go straight to dense layer instead of extra convolutions
+        x1 = Dropout(dropout, name='emb1_dropout_7')(x1)
+
+#         x1 = Conv2D(64, (3, 3), padding='same', name='emb1_conv2d_4')(x1)
+#         x1 = Activation('relu')(x1)
+#         x1 = MaxPooling2D(pool_size=(2, 1), padding='same', name='emb1_maxpool_5')(x1)
+#         x1 = Conv2D(128, (2, 2), padding='same', name='emb1_conv2d_6')(x1)
+#         x1 = Activation('relu')(x1)
+#         x1 = Conv2D(128, (2, 2), padding='same', name='emb1_conv2d_7')(x1)
+#         x1 = Activation('relu')(x1)
+#         x1 = MaxPooling2D(pool_size=(2, 1), padding='same', name='emb1_maxpool_8')(x1)
+#         x1 = Dropout(dropout, name='emb1_dropout_4')(x1)
+#         x1 = Flatten(name='emb1_flatten_9')(x1)
+#         x1 = Dense(128, activation='relu', name='emb1_dense_9')(x1)
+
+        # EMB23 image (convolutional)
+        x2 = Conv2D(32, (1, 1), padding='same', name='emb23_conv1d_1')(input2)
+        x2 = Activation('relu')(x2)
+
+        x2 = Conv2D(64, (2, 2), padding='same', name='emb23_conv2d_2')(x2)
+
+        x2 = MaxPooling2D(pool_size=(2, 2), padding='same', name='emb23_maxpool_3')(x2)
+        x2 = Conv2D(128, (2, 2), padding='same', name='emb23_conv2d_4')(x2)
+        x2 = Activation('relu')(x2)
+        
+        x2 = MaxPooling2D(pool_size=(2, 2), padding='same', name='emb23_maxpool_5')(x2)
+        x2 = Flatten(name='emb23_flatten_6')(x2)
+        x2 = Dense(128, activation='relu', name='emb23_dense_7')(x2) # go straight to dense layer instead of extra convolutions
+        x2 = Dropout(dropout, name='emb23_dropout_8')(x2)
+
+#         x2 = Conv2D(128, (2, 2), padding='same', name='emb23_conv2d_5')(x2)
+#         x2 = Activation('relu')(x2)
+#         x2 = MaxPooling2D(pool_size=(2, 2), padding='same', name='emb23_maxpool_6')(x2)
+#         x2 = Dropout(dropout, name='emb23_dropout_4')(x2)
+#         x2 = Flatten(name='emb23_flatten_7')(x2)
+#         x2 = Dense(128, activation='relu', name='emb23_dense_8')(x2)
+
+        # tiles image (convolutional)
+        x3 = Conv2D(32, (1, 1), padding='same', name='tiles_conv1d_1')(input3)
+        x3 = Activation('relu')(x3)
+
+        x3 = Conv2D(64, (2, 2), padding='same', name='tiles_conv2d_2')(x3)
+        x3 = Activation('relu')(x3)
+        
+        x3 = MaxPooling2D(pool_size=(2, 2), padding='same', name='tiles_maxpool_3')(x3)
+        x3 = Flatten(name='tiles_flatten_4')(x3)
+        x3 = Dense(128, activation='relu', name='tiles_dense_5')(x3) # go straight to dense layer instead of extra convolutions
+        x3 = Dropout(dropout, name='tiles_dropout_6')(x3)
+        
+#         x3 = Conv2D(128, (2, 2), padding='same', name='tiles_conv2d_3')(x3)
+#         x3 = Activation('relu')(x3)
+#         x3 = MaxPooling2D(pool_size=(2, 2), padding='same', name='tiles_maxpool_4')(x3)
+#         x3 = Dropout(dropout, name='tiles_dropout_4')(x3)
+#         x3 = Flatten(name='tiles_flatten_5')(x3)
+#         x3 = Dense(128, activation='relu', name='tiles_dense_6')(x3)
+
+        # concatenate outputs from the two networks above
+        x = Concatenate(axis=1, name='concatenate_1')([x1, x2, x3])
+        x = Dropout(dropout, name='concate_dropout_5')(x)
+        
+        # Add in energy and eta
+        x = Concatenate(axis=1, name='concatenate_2')([x,energy,eta])
+        
+        x = Dense(64, name='concated_dense_1')(x)    
+        x = Activation('relu')(x)
+        x = Dropout(dropout, name='dense_dropout_6')(x)
+        
+        # final output
+        output = Dense(units=1, kernel_initializer='normal', activation='linear')(x)
+
+        optimizer = Adam(lr=lr, decay=decay)
+        model = Model(inputs=input_list, outputs=output, name='Split_EMB_CNN')
+        model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
+        return model
+
 class resnet():
     def __init__(self, lr, decay, filter_sets, f_vals, s_vals, i_vals, channels=6, input_shape=(128,16), augmentation=True, normalization=True):
 

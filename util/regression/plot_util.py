@@ -81,7 +81,7 @@ def IqrPlot(e1, e2, title='title;x;y', nbins = 100, x_range = [0.,2000.], offset
         val = iqr[i]
         if(np.isnan(val)): continue
         b = i+1
-        hist.SetBinContent(b,val)
+        hist.SetBinContent(b,val)        
     return hist
 
 # For plotting the median ratio of predicted energy to true energy, versus true energy
@@ -146,7 +146,7 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
     clusterE = {}                # reco energy
     clusterE_calib = {}          # cluster_ENG_CALIB_TOT (true energy, as far as we're concerned)
     clusterE_pred = {}           # predicted energy
-    clusterE_true = {}           # "truth" energy from the parton level (I think), not what we're after
+    #clusterE_true = {}           # "truth" energy from the parton level (I think), not what we're after
     
     clusterE_ratio1 = {}         # ratio1: E_pred / ENG_CALIB_TOT
     clusterE_ratio2 = {}         # ratio2: E_reco / ENG_CALIB_TOT
@@ -188,7 +188,7 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
         clusterE[key] = {}
         clusterE_calib[key] = {}
         clusterE_pred[key] = {}    
-        clusterE_true[key] = {}
+        #clusterE_true[key] = {}
         
         clusterE_ratio1[key] = {}
         clusterE_ratio2[key] = {}
@@ -216,21 +216,21 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
             clusterE[key][dkey] = rt.TH1F(qu.RN(), 'E_{reco} ' + key2 +'; E_{reco} [GeV];Count' , bin_energy,0.,max_energy)
             clusterE_calib[key][dkey] = rt.TH1F(qu.RN(), 'E_{calib}^{tot} ' + key2 + ';E_{calib}^{tot} [GeV];Count', bin_energy,0.,max_energy)
             clusterE_pred[key][dkey] = rt.TH1F(qu.RN(), 'E_{pred} ' + key2 + ';E_{pred} [GeV];Count', bin_energy,0.,max_energy)
-            clusterE_true[key][dkey] = rt.TH1F(qu.RN(), 'E_{true} ' + key2 + ';E_{true} [GeV];Count', bin_energy,0.,max_energy)
+            #clusterE_true[key][dkey] = rt.TH1F(qu.RN(), 'E_{true} ' + key2 + ';E_{true} [GeV];Count', bin_energy,0.,max_energy)
             clusterE_ratio1[key][dkey] = rt.TH1F(qu.RN(), 'E_{pred} / E_{calib}^{tot} ' + key2 + ';E_{pred}/E_{calib}^{tot};Count', 250,0.,10.)
             clusterE_ratio2[key][dkey] = rt.TH1F(qu.RN(), 'E / E_{calib}^{tot} ' + key2 + ';E_{reco}/E_{calib}^{tot]};Count', 250,0.,10.)
 
             qu.SetColor(clusterE[key][dkey], ps.main, alpha = 0.4)
             qu.SetColor(clusterE_calib[key][dkey], rt.kPink + 9, alpha = 0.4)
             qu.SetColor(clusterE_pred[key][dkey], ps.curve, alpha = 0.4)        
-            qu.SetColor(clusterE_true[key][dkey], rt.kRed, alpha = 0.4)
+#             qu.SetColor(clusterE_true[key][dkey], rt.kRed, alpha = 0.4)
             qu.SetColor(clusterE_ratio1[key][dkey], ps.main, alpha = 0.4)
             qu.SetColor(clusterE_ratio2[key][dkey], ps.curve, alpha = 0.4)
 
             meas   = frame[key]['clusterE'].to_numpy()
             calib  = frame[key]['cluster_ENG_CALIB_TOT'].to_numpy()
             pred   = frame[key][energy_name].to_numpy()
-            true   = frame[key]['truthE'].to_numpy()
+            #true   = frame[key]['truthE'].to_numpy()
             ratio1 = pred / calib
             ratio2 = meas / calib
     
@@ -238,7 +238,7 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
                 clusterE[key][dkey].Fill(meas[i])
                 clusterE_calib[key][dkey].Fill(calib[i])
                 clusterE_pred[key][dkey].Fill(pred[i])            
-                clusterE_true[key][dkey].Fill(true[i])
+                #clusterE_true[key][dkey].Fill(true[i])
                 clusterE_ratio1[key][dkey].Fill(ratio1[i])
                 clusterE_ratio2[key][dkey].Fill(ratio2[i])
             
@@ -286,7 +286,7 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
             iqr_stacks_zoomed[key][dkey].Add(ratio2_iqr_zoomed[key][dkey])
             
         # Prepare the list of plots we'll show (we might exclude some).
-        plots = [clusterE, clusterE_calib, clusterE_pred, clusterE_true, energy_stacks, clusterE_ratio2D, clusterE_ratio2D_zoomed, iqr_stacks, iqr_stacks_zoomed]
+        plots = [clusterE, clusterE_calib, clusterE_pred, energy_stacks, clusterE_ratio2D, clusterE_ratio2D_zoomed, iqr_stacks, iqr_stacks_zoomed]
         if(not full): plots = [energy_stacks, clusterE_ratio2D, clusterE_ratio2D_zoomed, iqr_stacks, iqr_stacks_zoomed]
         dkeys = list(dsets.keys())
         
@@ -327,13 +327,16 @@ def EnergySummary(train_dfs, valid_dfs, data_dfs, energy_name, model_name, plotp
                     
                     else:
                         plot[key][dkey].GetHistogram().GetYaxis().SetTitle(ratio1_iqr[key][dkey].GetYaxis().GetTitle())
-                        plot[key][dkey].SetMinimum(0.01)
+                        plot[key][dkey].SetMinimum(1.0e-2)
                         plot[key][dkey].SetMaximum(1.)
                         
                     if(plot == iqr_stacks_zoomed):
                         rt.gPad.SetLogx()
                         rt.gPad.SetBottomMargin(0.15)
                         plot[key][dkey].GetXaxis().SetTitleOffset(1.5)
+                        
+                    if(plot == iqr_stacks or plot == iqr_stacks_zoomed):
+                        plot[key][dkey].SetMinimum(1.0e-3)
                         
                     legends[key].SetTextColor(ps.text)
                     legends[key].Draw()

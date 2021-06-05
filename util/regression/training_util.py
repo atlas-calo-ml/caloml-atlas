@@ -14,11 +14,14 @@ def TrainNetwork(model,
                  epochs=20, batch_size=200, verbose=1, 
                  overwriteModel=False, finishTraining=True):
     
+    model, custom_objects = model.model, model.custom_objects
+
+    
     # Set up our KerasRegressor wrapper.
     # I'm not 100% sure why we do this for our regressors (but not our classifiers),
     # but as we use this in the original training code I'll keep it for now.
     regressor = KerasRegressor(
-        build_fn = model.model,
+        build_fn = model,
         batch_size = batch_size,
         epochs = epochs,
         verbose = verbose
@@ -35,7 +38,7 @@ def TrainNetwork(model,
     else: history_filename = modelfile + '.csv' # if using .tf format, there won't be a file extension on the string at all.
     initial_epoch = 0
     if(pathlib.Path(modelfile).exists() and not overwriteModel):
-        regressor.model = load_model(modelfile)
+        regressor.model = load_model(modelfile, custom_objects=custom_objects)
         
         # Now we want to figure out for how many epochs the loaded model was already trained,
         # so that it's trained, in total, for the requested number of epochs.
