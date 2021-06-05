@@ -4,13 +4,14 @@ from tensorflow.keras import Sequential
 from tensorflow.keras import Model
 from tensorflow.keras.optimizers import SGD, Adam
 from tensorflow.keras.layers import concatenate
-from tensorflow.keras.layers import BatchNormalization, Concatenate, Dense, Dropout, Input
+from tensorflow.keras.layers import BatchNormalization, Concatenate, Dense, Dropout, Input, Flatten
 from tensorflow.keras.layers.experimental.preprocessing import RandomFlip
 #from keras.wrappers.scikit_learn import KerasRegressor
 from string import ascii_lowercase
 
 # Custom layers.
 from util.keras.layers import *
+#from util import ml_util as mu
 
 # A simple, fully-connected network architecture.
 # Inputs correspond with the pixels of all the images,
@@ -116,7 +117,8 @@ class resnet():
         decay = self.decay
         
         # Input images -- one for each channel, each channel's dimensions may be different.
-        inputs = [Input((None,None,1),name='input'+str(i)) for i in range(channels)]
+        inputs = [Input((None,None,1),name='input_'+str(i)) for i in range(channels)]
+        eta_input = Input((1),name='eta')
 
         # Rescale all the input images, so that their dimensions now match.
         # Note that we make sure to re-normalize the images so that we preserve their energies.
@@ -158,6 +160,7 @@ class resnet():
         X = AveragePooling2D(pool_size=pool_size, name="avg_pool")(X)
         
         # Transition into output: Add eta info, and use a simple DNN.
+        X = Flatten()(X)
         tensor_list = [X,eta_input]
         X = Concatenate(axis=1)(tensor_list)
         units = X.shape[1]

@@ -4,6 +4,7 @@ import uproot as ur
 import awkward as ak
 import pandas as pd
 import h5py as h5
+import joblib as jl
 from sklearn.model_selection import ShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_curve, auc
@@ -233,7 +234,6 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                 for layer in layers:
                     dset = hf.create_dataset('{}:{}'.format(key,layer), data=pcells[key][layer], chunks=True, compression='gzip', compression_opts=7)
             hf.close()
-    
     return pdata, pcells    
 
 def splitFrameTVT(frame,
@@ -244,7 +244,6 @@ def splitFrameTVT(frame,
                   filename=''):
 
     compute_indices = True
-    
     # Optionally load indices, if the requested file exists and the appropriate key can be found in it.
     if(filename != '' and pathlib.Path(filename).exists()):
         f = h5.File(filename,'r')
@@ -299,45 +298,74 @@ def splitFrameTVT(frame,
             dset = f.create_dataset(wkey, data=indices[i], chunks=True, compression='gzip', compression_opts=5)
         f.close()
     return
+      
+def setupScalers(pdata, branch_names, scaler_file=''):
+    compute_scalers = True
+    # load scalers from file if it exists
+    if(scaler_file != '' and pathlib.Path(scaler_file).exists()):
+        print('Loading scalers from {}.'.format(scaler_file))
+        scalers = jl.load(scaler_file)
+        compute_scalers = False
+        # check that we have all the requested scalers in this file, otherwise remake them all
+        keys = scalers[list(scalers.keys())[0]].keys()
+        for key in keys:
+            if(key not in branch_names):
+                print('\tWarning: Did not find key {}. Will recompute all scalers & save.'.format(key))
+                compute_scalers = True
+                break
         
+    # create (and save) scalers if file does not exist (or if some scalers were missing)
+    if(compute_scalers):
+        scalers = {}
+        for key,frame in pdata.items():
+            scalers[key] = {}
+            for branch in branch_names:
+                scalers[key][branch] = StandardScaler()
+                scalers[key][branch].fit(frame[frame['train']==True][branch].to_numpy().reshape(-1,1))
+                
+        if(scaler_file != ''): result = jl.dump(scalers, scaler_file)
+            
+    # apply scalers to pdata
+    for key,frame in pdata.items():
+        for branch in branch_names:
+            frame['s_{}'.format(branch)] = scalers[key][branch].transform(frame[branch].to_numpy().reshape(-1,1))
+    return scalers
+    
 def setupCells(arrays, layer, nrows = -1, indices = [], flatten=True):
     if(type(arrays) != list): arrays = [arrays]
-    array = np.row_stack([arr[layer].to_numpy() for arr in arrays])
+    if(type(layer) != list): layer = [layer]
+    # Slightly different behaviour depending on whether the elements of arrays
+    # are awkward arrays or numpy arrays -- if the former, we must convert to numpy.
+    if(type(arrays[0][layer[0]]) == np.ndarray): array = np.row_stack([np.concatenate([arr[l] for l in layer], axis=1) for arr in arrays])
+    else: array = np.row_stack([np.concatenate([arr[l].to_numpy() for l in layer], axis=1) for arr in arrays])    
+    
     if nrows > 0:
         array = array[:nrows]
     elif len(indices) > 0:
         array = array[indices]
-    num_pixels = cell_meta[layer]['len_phi'] * cell_meta[layer]['len_eta']
+    num_pixels = np.sum([cell_meta[l]['len_phi'] * cell_meta[l]['len_eta'] for l in layer])
     if flatten:
         array = array.reshape(len(array), num_pixels)
-    
     return array
 
-def standardCells(array, layer, nrows = -1):
-    if nrows > 0:
-        working_array = array[:nrows]
-    else:
-        working_array = array
-
+def standardCells(arrays, layer, nrows = -1, indices = []):
+    if(type(arrays) != list): arrays = [arrays]
+    if(type(layer) != list): layer = [layer]
+    # Slightly different behaviour depending on whether the elements of arrays
+    # are awkward arrays or numpy arrays -- if the former, we must convert to numpy.
+    
+    if(type(arrays[0][layer[0]]) == np.ndarray): array = np.row_stack([np.concatenate([arr[l] for l in layer], axis=1) for arr in arrays])
+    else: array = np.row_stack([np.concatenate([arr[l].to_numpy() for l in layer], axis=1) for arr in arrays])        
+                
+    if nrows > 0: array = array[:nrows]
+    elif len(indices) > 0: array = array[indices]
+        
+    num_pixels = np.sum([cell_meta[l]['len_phi'] * cell_meta[l]['len_eta'] for l in layer])
+    num_clusters = len(array)
     scaler = StandardScaler()
-    if type(layer) == str:
-        num_pixels = cell_meta[layer]['len_phi'] * cell_meta[layer]['len_eta']
-    elif type(layer) == list:
-        num_pixels = 0
-        for l in layer:
-            num_pixels += cell_meta[l]['len_phi'] * cell_meta[l]['len_eta']
-    else:
-        print('you should not be here')
-
-    num_clusters = len(working_array)
-
-    flat_array = np.array(working_array.reshape(num_clusters * num_pixels, 1))
-
-
-    scaled = scaler.fit_transform(flat_array)
-
-    reshaped = scaled.reshape(num_clusters, num_pixels)
-    return reshaped, scaler
+    array = array.reshape((num_clusters * num_pixels, 1))
+    array = scaler.fit_transform(array).reshape((num_clusters, num_pixels))
+    return array
 
 def standardCellsGeneral(array, nrows = -1):
     if nrows > 0:

@@ -6,6 +6,7 @@ from tensorflow.keras.layers import Input, Add, Concatenate, Dense, Dropout, Act
 from tensorflow.keras.layers.experimental.preprocessing import RandomFlip
 from string import ascii_lowercase
 
+
 # Custom layers.
 from util.keras.layers import *
 
@@ -455,7 +456,7 @@ class resnet():
         X = Dense(classes, activation='softmax', name='fc' + str(classes), kernel_initializer = glorot_uniform(seed=0))(X)
 
         # Create model object.
-        model = Model(inputs=inputs, outputs=X, name='ResNet')
+        model = Model(inputs=inputs, outputs=X, name='ResNet50')
 
         # Compile the model
         optimizer = Adam(lr=lr)
