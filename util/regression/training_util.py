@@ -1,5 +1,6 @@
 import os, pickle, pathlib
 import pandas as pd
+import h5py as h5
 from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
 from tensorflow.keras.models import load_model
 
@@ -101,3 +102,28 @@ def TrainNetwork(model,
         print('Please provide a CSVLogger callback to prevent this in the future.')
 
     return regressor, history
+
+# Get resu
+def GetPredictions(regressor, model_input, indices=None, truth=None, scaler=None, mapping=None, filename=None):
+    
+    result = regressor.predict(model_input)
+    if(scaler is not None): result = scaler.inverse_transform(result)
+    if(mapping is not None): result = mapping.Inverse(result)
+    
+    # save the predictions to a file
+    if(filename is not None):
+        f = h5.File(filename,'w')
+        
+        # save the training/testing/validation indices if given (these might be useful to interpret results)
+        if(indices is not None):
+            for key in indices.keys():
+                d = f.create_dataset(key,data=indices[key],chunks=True,compression='gzip',compression_opts=7)
+                
+        # save the truth values (to compare to predictions). This will definitely be useful (and required for some of our scripts to eval results)
+        if(truth is not None):
+            d = f.create_dataset('truth',data=truth,chunks=True,compression='gzip',compression_opts=7)
+            
+        # save the network outputs
+        d = f.create_dataset('output',data=result,chunks=True,compression='gzip',compression_opts=7)
+        f.close()
+    return result
