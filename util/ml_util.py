@@ -339,11 +339,20 @@ def setupCells(arrays, layer, nrows = -1, indices = [], flatten=True):
     if(type(arrays[0][layer[0]]) == np.ndarray): array = np.row_stack([np.concatenate([arr[l] for l in layer], axis=1) for arr in arrays])
     else: array = np.row_stack([np.concatenate([arr[l].to_numpy() for l in layer], axis=1) for arr in arrays])    
     
+    if nrows > 0: array = array[:nrows]
+    elif len(indices) > 0: array = array[indices]
+    num_pixels = np.sum([cell_meta[l]['len_phi'] * cell_meta[l]['len_eta'] for l in layer])
+    if flatten: array = array.reshape(len(array), num_pixels)
+    return array
+
+# Old version of setupCells, keeping this for backwards compatibility
+def setupCellsLegacy(tree, layer, nrows = -1, indices = [], flatten=True):
+    array = tree.arrays([layer], library='np')[layer]
     if nrows > 0:
         array = array[:nrows]
     elif len(indices) > 0:
         array = array[indices]
-    num_pixels = np.sum([cell_meta[l]['len_phi'] * cell_meta[l]['len_eta'] for l in layer])
+    num_pixels = cell_meta[layer]['len_phi'] * cell_meta[layer]['len_eta']
     if flatten:
         array = array.reshape(len(array), num_pixels)
     return array
@@ -366,6 +375,28 @@ def standardCells(arrays, layer, nrows = -1, indices = []):
     array = array.reshape((num_clusters * num_pixels, 1))
     array = scaler.fit_transform(array).reshape((num_clusters, num_pixels))
     return array
+
+# Old version of standardCells, keeping this for backwards compatibility
+def standardCellsLegacy(array, layer, nrows = -1):
+    if nrows > 0: 
+        working_array = array[:nrows]
+    else: 
+        working_array = array
+    scaler = StandardScaler()
+    if type(layer) == str:
+        num_pixels = cell_meta[layer]['len_phi'] * cell_meta[layer]['len_eta']
+    elif type(layer) == list:
+        num_pixels = 0
+        for l in layer:
+            num_pixels += cell_meta[l]['len_phi'] * cell_meta[l]['len_eta']
+    else:
+        print('you should not be here')
+
+    num_clusters = len(working_array)
+    flat_array = np.array(working_array.reshape(num_clusters * num_pixels, 1))
+    scaled = scaler.fit_transform(flat_array)
+    reshaped = scaled.reshape(num_clusters, num_pixels)
+    return reshaped, scaler
 
 def standardCellsGeneral(array, nrows = -1):
     if nrows > 0:
