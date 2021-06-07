@@ -19,7 +19,8 @@ data_path_pi0  = data_path + 'pi0/'
 pipm_list = glob(data_path_pipm+'*root')
 pi0_list =  glob(data_path_pi0 + '*root')
 
-#pipm_list = ['/fast_scratch/atlas_images/v01-45/pipm/user.angerami.24559744.OutputStream._000421.root']
+pipm_list = ['/fast_scratch/atlas_images/v01-45/pipm_medium.root']
+pi0_list = ['/fast_scratch/atlas_images/v01-45/pi0_medium.root']
 
 def convertFile(filename, label):
     print('Working on {}'.format(filename))
@@ -71,7 +72,7 @@ def convertFile(filename, label):
                     axis = 2)
 
     Y_label = to_categorical(np.ones(len(X)) * label)
-    Y_target = np.log(clus_targetE)
+    Y_target = np.log(clus_targetE[selection])
 
     #Now we save. prepare output filename.
     outname = filename.replace('root', 'npz')
