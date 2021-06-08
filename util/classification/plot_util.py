@@ -6,6 +6,7 @@ from matplotlib.colors import Normalize, LogNorm, SymLogNorm, TwoSlopeNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from util import plot_util as pu
+from util import ml_util as mu
 from util import qol_util  as qu
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # disable some of the tensorflow info printouts, only display errors
@@ -123,15 +124,10 @@ def RocCurves(model_scores,
 
 
 # -- Kinematic Plots below --
-def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_shapes=[], scaled_shape = [], latex_mpl = {}, plotpath = '', filename = '', plotstyle=qu.PlotStyle('dark')):
+def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_shapes={}, scaled_shape = [], latex_mpl = {}, plotpath = '', filename = '', plotstyle=qu.PlotStyle('dark')):
     # Set some default values.
-    if(layers == []):
-        layers = ['EMB1','EMB2','EMB3','TileBar0','TileBar1','TileBar2']
-    
-    if(cell_shapes == []):
-        len_phi = [4, 16, 16, 4, 4, 4]
-        len_eta = [128, 16, 8, 4, 4, 2]
-        cell_shapes = {layers[i]:(len_eta[i],len_phi[i]) for i in range(len(layers))}
+    if(layers == []): layers = list(mu.cell_meta.keys())
+    if(cell_shapes == {}): cell_shapes = {key: (val['len_eta'],val['len_phi']) for key,val in mu.cell_meta.items()}
     
     if(latex_mpl == {}):
         latex_mpl = {
@@ -148,7 +144,12 @@ def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_sh
     for ptype, pcell in pcells.items():
         for layer in layers:
             axis = ax.flatten()[i]
-            image = pcell[layer][cluster].reshape(cell_shapes[layer])
+            
+            # default behaviour: plot a single cluster
+            if(cluster >= 0): image = pcell[layer][cluster].reshape(cell_shapes[layer])
+            
+            # if cluster index is negative, provide an average image
+            else: image = np.mean(pcell[layer],axis=0).reshape(cell_shapes[layer])
             
             if(dynamic_range):
                 vmin, vmax = np.min(image), np.max(image)
@@ -169,7 +170,6 @@ def ImagePlot(pcells, cluster, log=True, dynamic_range=False, layers=[], cell_sh
             if(scaling): 
                 # Use our ImageScaleBlock. It requires a 4d tensor, format is [batch,eta,phi,channel].
                 image = np.expand_dims(image, axis=(0,-1))
-                #image = np.expand_dims(image, axis=-1)
                 image = np.squeeze(ImageScaleBlock(new_shape=tuple(scaled_shape), normalization=True)([image]).numpy())
   
             im = axis.imshow(

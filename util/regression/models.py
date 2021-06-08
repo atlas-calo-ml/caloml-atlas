@@ -50,8 +50,10 @@ class baseline_nn_model():
 # Inputs correspond to the reco energy, eta, as well as a vector
 # encoding the percentage of energy deposited in each calorimeter layer.
 class depth_network():
-    def __init__(self, strategy, lr=5e-5, decay=1e-6, dropout=-1):
+    def __init__(self, strategy, units=8, depth=3, lr=5e-5, decay=1e-6, dropout=-1):
         self.strategy = strategy
+        self.units = units
+        self.depth = depth
         self.dropout = dropout
         self.decay = decay
         self.lr = lr
@@ -61,20 +63,18 @@ class depth_network():
     def model(self):
         dropout = self.dropout
         decay = self.decay
+        units = self.units
+        depth = self.depth
         strategy = self.strategy
         lr = self.lr
-        number_pixels = 512 + 256 + 128 + 16 + 16 + 8
         with strategy.scope():    
             energy_input = Input(shape=(1,),name='energy')
             eta_input    = Input(shape =(1,), name='eta')
             depth_input = Input(shape=(6,),name='depth')
             
             input_list = [energy_input, eta_input, depth_input]
-            
-            X = tf.concat(values = input_list,axis=1,name='concat')
-            X = Dense(units=8, activation='relu',name='Dense1')(X)
-            X = Dense(units=8, activation='relu',name='Dense2')(X)
-            X = Dense(units=8, activation='relu',name='Dense3')(X)
+            X = Concatenate(axis=1, name='concat')([energy_input, eta_input, depth_input])
+            for i in range(depth): X = Dense(units=units, activation='relu',name='Dense_{}'.format(i+1))(X)
             X = Dense(units=1, kernel_initializer='normal', activation='linear')(X)
             
             optimizer = Adam(lr=lr, decay=decay)

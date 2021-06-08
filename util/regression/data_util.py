@@ -4,27 +4,6 @@ from util import ml_util as mu
 
 # --- Data Prep Functions below ---
 
-# Prepare the calo images for input to training.
-def LoadCaloImages(dtree,indices=-1,layers=['EMB1','EMB2','EMB3','TileBar0','TileBar1','TileBar2']):
-    l = len(layers) * len(dtree.keys())
-    i = 0
-    pfx = 'Loading calo images:      '
-    sfx = 'Complete'
-    bl = 50
-    qu.printProgressBarColor(i, l, prefix=pfx, suffix=sfx, length=bl)
-
-    calo_images = {}
-    for key in dtree.keys():
-        calo_images[key] = {}
-    
-        for layer in layers:
-            if(indices != -1): calo_images[key][layer] = mu.setupCells(dtree[key],layer, indices = indices[key])
-            else: calo_images[key][layer] = mu.setupCells(dtree[key],layer)
-            i += 1
-            qu.printProgressBarColor(i, l, prefix=pfx, suffix=sfx, length=bl)
-    return calo_images
-
-
 # Basic data preparation.
 def DataPrep(pdata, trainfrac=0.7, filename=''):
     '''

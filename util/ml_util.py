@@ -286,7 +286,7 @@ def splitFrameTVT(frame,
     frame[testlabel]  = frame.index.isin(test_index)
     frame[vallabel]   = frame.index.isin(val_index)
 
-    # Save indices, if they are not already present.
+    # Save indices, if they are not already present. TODO: Consider skipping write if nothing changed, to avoid changing file timestamp.
     if(filename != ''):
         f = h5.File(filename,'a')
         f_keys = list(f.keys())
