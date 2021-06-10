@@ -104,7 +104,7 @@ def TrainNetwork(model,
     return regressor, history
 
 # Get resu
-def GetPredictions(regressor, model_input, indices=None, truth=None, scaler=None, mapping=None, filename=None):
+def GetPredictions(regressor, model_input, indices=None, truth=None, reco=None, scaler=None, mapping=None, filename=None):
     
     result = regressor.predict(model_input)
     if(scaler is not None): result = scaler.inverse_transform(result)
@@ -122,6 +122,10 @@ def GetPredictions(regressor, model_input, indices=None, truth=None, scaler=None
         # save the truth values (to compare to predictions). This will definitely be useful (and required for some of our scripts to eval results)
         if(truth is not None):
             d = f.create_dataset('truth',data=truth,chunks=True,compression='gzip',compression_opts=7)
+            
+        # save the reco values (to compare/use with predictions). This will be useful as a baseline.
+        if(reco is not None):
+            d = f.create_dataset('reco',data=reco,chunks=True,compression='gzip',compression_opts=7)
             
         # save the network outputs
         d = f.create_dataset('output',data=result,chunks=True,compression='gzip',compression_opts=7)
