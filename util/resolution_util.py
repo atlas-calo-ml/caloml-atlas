@@ -52,7 +52,7 @@ def stdOverMean(x):
 def iqrOverMed(x):
     # get the IQR via the percentile function
     # 84 is median + 1 sigma, 16 is median - 1 sigma
-    q84, q16 = np.percentile(x, [75, 25])
+    q84, q16 = np.percentile(x, [84, 16])
     iqr = q84 - q16
     med = np.median(x)
     return iqr / med
