@@ -10,7 +10,8 @@ def TrainNetwork(model,
                  modelfile, 
                  x_train, y_train, 
                  x_valid, y_valid, 
-                 callbacks = [], 
+                 callbacks = [],
+                 sample_weight = None,
                  epochs=20, batch_size=200, verbose=1, 
                  overwriteModel=False, finishTraining=True,
                  custom_objects = {}):
@@ -53,17 +54,21 @@ def TrainNetwork(model,
     # to evaluating the model, which is especially helpful if EarlyStopping was used
     # and the final model didn't reach the specified last epoch.
     if(finishTraining or not pathlib.Path(modelfile).exists()):
+        
+        if(sample_weight == None): sample_weight=(None,None)        
         history = model.fit(
             x_train, y_train,
             validation_data=(
                 x_valid,
-                y_valid
+                y_valid,
+                sample_weight[1]
             ),
             epochs=epochs,
             initial_epoch=initial_epoch,
             batch_size=batch_size,
             verbose=verbose,
-            callbacks=callbacks
+            callbacks=callbacks,
+            sample_weight=sample_weight[0]
         )
     
     saveModel = True

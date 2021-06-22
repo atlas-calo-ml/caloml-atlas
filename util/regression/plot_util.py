@@ -48,9 +48,9 @@ def EnergyPlot2D(e1, e2, title='title;x;y', nbins = [100,35], x_range = [0.,2000
     curve.SetLineWidth(2)
     return curve, hist
 
-# For plotting the inter-quantile range for ratio of predicted energy to true energy, versus true energy.
+# For plotting the inter-quantile range for ratio of predicted energy to true energy, versus true energy (or something else).
 # (interquantile, *not* interquartile)
-def IqrPlot(e1, e2, title='title;x;y', nbins = 100, x_range = [0.,2000.], offset=False, quantiles = (16, 84), normalize=True):
+def IqrPlot(e1, e2, e3=None, title='title;x;y', nbins = 100, x_range = [0.,2000.], offset=False, quantiles = (16, 84), normalize=True):
     
     # To compute the true IQR's, we will use lists of energy ratios for each truth energy bin,
     # versus using the 2D histogram from EnergyPlot2D -- we don't want to bin in y, because that
@@ -61,19 +61,24 @@ def IqrPlot(e1, e2, title='title;x;y', nbins = 100, x_range = [0.,2000.], offset
     y_lists = [[] for i in range(nbins)]
     
     # get the binned x_vals
-    x_vals = np.digitize(e2,x_bins) - 1 # subtracting one for the expected binning behaviour, e.g. with x_bins[0]=0 & x_bins[1]=1, x=.5 should go in bin[0]
+    if(e3 is None): e3 = e2
+    x_vals = np.digitize(e3,x_bins) - 1 # subtracting one for the expected binning behaviour, e.g. with x_bins[0]=0 & x_bins[1]=1, x=.5 should go in bin[0]
     
     ratios = e1/e2
     for i in range(n):
         y_lists[int(x_vals[i])].append(ratios[i])
     y_lists = [np.array(x) for x in y_lists]
     
-    # Now calculate the IQR for each x bin.
-    iqr =  np.array([np.percentile(x,q=quantiles[1]) for x in y_lists])
-    iqr -= np.array([np.percentile(x,q=quantiles[0]) for x in y_lists])
-        
+    iqr = np.zeros(n)
+    for i,x in enumerate(y_lists):
+        if(x.shape[0] == 0.): continue
+        iqr[i] = np.percentile(x,q=quantiles[1]) - np.percentile(x,q=quantiles[0])
+ 
     # Also fetch the medians, which we might need if normalizing by median.
-    median = [np.median(x) for x in y_lists]
+    median = np.full(n,1.)
+    for i,x in enumerate(y_lists):
+        if(x.shape[0] == 0.): continue
+        median[i] = np.median(x)
         
     # Now make the plot.     
     # Scipy.stats.iqr gives nan for empty input,

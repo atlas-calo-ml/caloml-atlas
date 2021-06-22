@@ -71,7 +71,8 @@ def RocCurves(model_scores,
               data_labels, 
               roc_fpr, roc_tpr, 
               roc_thresh, roc_auc, 
-              indices=[], 
+              indices=[],
+              sample_weight=None,
               plotpath = '/', plotname = 'ROC', 
               model_keys = [], 
               drawPlots=True, figsize=(15,5), 
@@ -85,6 +86,7 @@ def RocCurves(model_scores,
             data_labels[indices],
             model_scores[model_key][indices],
             drop_intermediate=False,
+            sample_weight=sample_weight
         )
         roc_auc[model_key] = auc(roc_fpr[model_key], roc_tpr[model_key])
         print('Area under curve for {}: {}'.format(model_key, roc_auc[model_key]))

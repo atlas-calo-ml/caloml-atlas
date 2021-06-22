@@ -19,7 +19,7 @@ def DataPrep(pdata, pcells, layers, trainfrac=0.7, filename=''):
         layer : np.concatenate([pcells[ptype][layer] for ptype in pdata.keys()])
         for layer in layers
     }
-    plabels = to_categorical(pdata_merged['label'],len(pdata.keys())) # higher score -> more likely to be charged
+    plabels = to_categorical(pdata_merged['label'],len(pdata.keys()))
     return pdata_merged, pcells_merged, plabels
 
 def ReshapeImages(pcells_merged, cell_shapes, use_layer_names=False, keys=[]):

@@ -41,17 +41,25 @@ def CombinedInput(pdata, pcells, branches=[], layers=None):
         qu.printProgressBarColor(i, l, prefix=pfx, suffix=sfx, length=bl)
     return All_input
 
-def ResnetInput(pdata, pcells, layers=None, branch_map={}):
+def ResnetInput(pdata, pcells, layers=None, branch_map={}, use_layer_names=False):
     if(layers is None): layers = list(mu.cell_meta.keys())
     
     # Unflatten images. Note the keys used here -- any network that uses this input must internally use the same keys to access the data.
     rn_input = {}
     
     for key,frame in pdata.items():
-        rn_input[key] = {
-            'input_{}'.format(i):pcells[key][layer].reshape([-1,mu.cell_meta[layer]['len_eta'],mu.cell_meta[layer]['len_phi']])
-            for i,layer in enumerate(layers)
-        }
+        
+        if(use_layer_names):
+            rn_input[key] = {
+                layer:pcells[key][layer].reshape([-1,mu.cell_meta[layer]['len_eta'],mu.cell_meta[layer]['len_phi']])
+                for i,layer in enumerate(layers)
+            }
+        else:
+            rn_input[key] = {
+                'input_{}'.format(i):pcells[key][layer].reshape([-1,mu.cell_meta[layer]['len_eta'],mu.cell_meta[layer]['len_phi']])
+                for i,layer in enumerate(layers)
+            }
+            
         for branch,varname in branch_map.items(): rn_input[key][varname] = pdata[key][branch].to_numpy()
     
     # TODO: consider re-introducing some optional energy scaling of images.
@@ -74,19 +82,29 @@ def DepthInput(pdata, pcells, layers=None, branch_map={}):
         for branch,varname in branch_map.items(): All_input[key][varname] = pdata[key][branch].to_numpy()
     return All_input
     
-# Splitting things into training and validation -- if we use a dictionary structure it's a bit more involved than for CombinedInput.
-def DictionarySplit(rn_input, pdata):
+# Splitting things into training, validation and testing, when our data is in a dictionary format.
+def DictionarySplit(rn_input, pdata, include_no_split=False):
     # Now explicitly split things up into training and validation data.
-    rn_train = {
-        key:{
-            input_key:val[pdata[key]['train']] for input_key,val in dset.items()
+    
+    splits = ['train','val','test']
+    
+    results = {
+        split:{
+            key:{
+                input_key:val[pdata[key][split]] for input_key,val in dset.items()
+            }
+            for key,dset in rn_input.items()
         }
-        for key,dset in rn_input.items()
+        for split in splits
     }
-    rn_valid = {
-        key:{
-            input_key:val[pdata[key]['val']] for input_key,val in dset.items()
+    
+    # Optionally include the "unsplit" data, in case we still want this.
+    if(include_no_split):
+        results['all'] = {
+            key:{
+                input_key:val for input_key,val in dset.items()
+            }
+            for key,dset in rn_input.items()
         }
-        for key,dset in rn_input.items()
-    }
-    return {'train':rn_train, 'val':rn_valid}
+        
+    return results
