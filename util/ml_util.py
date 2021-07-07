@@ -686,3 +686,10 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
                     # included in some datasets, so the energy fraction may be slightly off
 
     return pcells
+
+# Some (experimenmtal) functions for turning calo images into sets of 4-vectors
+
+# given eta, E and m, return the p_T
+def EtaEM2Pt(eta,e,m):
+    return np.sqrt(np.square(E) - np.square(m)) / np.cosh(eta)
+
