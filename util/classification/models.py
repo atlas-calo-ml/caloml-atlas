@@ -30,29 +30,29 @@ class baseline_nn_model():
         used_pixels = self.number_pixels
         strategy = self.strategy
         lr = self.lr
-        with strategy.scope():                
-            X_in = Input((used_pixels),name='input')
-            X = X_in
-                        
-            # If requested, normalize the flattened input images to integrate to one.
-            # This removes any information on the energy scale that may be in the input images.
-            if(normalization): X = NormalizationBlock(axes=[1])(X)
-                
-            X = Dense(used_pixels, kernel_initializer='normal',activation='relu')(X)
-            if(dropout > 0.): X = Dropout(dropout)(X)
-                
-            X = Dense(used_pixels, activation='relu')(X)
-            if(dropout > 0.): X = Dropout(dropout)(X)
-                
-            X = Dense(int(used_pixels/2), activation='relu')(X)
-            if(dropout > 0.): X = Dropout(dropout)(X)
+        #with strategy.scope():                
+        X_in = Input((used_pixels),name='input')
+        X = X_in
 
-            X = Dense(2, kernel_initializer='normal', activation='softmax')(X)
-            
-            # compile the model
-            model = Model(inputs=X_in, outputs=X, name='base_nn')
-            optimizer = Adam(lr=lr)
-            model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
+        # If requested, normalize the flattened input images to integrate to one.
+        # This removes any information on the energy scale that may be in the input images.
+        if(normalization): X = NormalizationBlock(axes=[1])(X)
+
+        X = Dense(used_pixels, kernel_initializer='normal',activation='relu')(X)
+        if(dropout > 0.): X = Dropout(dropout)(X)
+
+        X = Dense(used_pixels, activation='relu')(X)
+        if(dropout > 0.): X = Dropout(dropout)(X)
+
+        X = Dense(int(used_pixels/2), activation='relu')(X)
+        if(dropout > 0.): X = Dropout(dropout)(X)
+
+        X = Dense(2, kernel_initializer='normal', activation='softmax')(X)
+
+        # compile the model
+        model = Model(inputs=X_in, outputs=X, name='base_nn')
+        optimizer = Adam(learning_rate=lr)
+        model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 
 # A "simple" convolutional neural network (CNN). Uses a single calo image.
@@ -96,7 +96,7 @@ class baseline_cnn_model():
         X = Dense(2, kernel_initializer='normal', activation='softmax')(X)
         model = Model(inputs=X_in, outputs=X, name='SL_CNN')
         # compile model
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 
@@ -161,7 +161,7 @@ class emb_cnn_model():
         model = Model(inputs = [input0, input1, input2], outputs=X)
     
         # compile model
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
     
@@ -262,7 +262,7 @@ class all_cnn_model():
         model = Model(inputs = [input0, input1, input2, input3, input4, input5], outputs=X)
     
         # compile model
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
     
@@ -311,7 +311,7 @@ class merged_cnn_model():
         output = Dense(2, activation='softmax')(X)
         
         model = Model(inputs=inputs, outputs=output)
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 
@@ -368,7 +368,7 @@ class merged_cnn_2p_model():
         output = Dense(2, activation='softmax')(X)
         
         model = Model(inputs=inputs, outputs=output)
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
     
@@ -458,7 +458,7 @@ class resnet():
         model = Model(inputs=inputs, outputs=X, name='ResNet')
 
         # Compile the model
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 
@@ -482,7 +482,7 @@ class simple_combine_model():
             model.add(Dense(4, activation='relu')) # TODO: Change width from 4 to n_input?
             model.add(Dense(2, kernel_initializer='normal', activation='softmax'))
             # compile model
-            optimizer = Adam(lr=lr)
+            optimizer = Adam(learning_rate=lr)
             model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 

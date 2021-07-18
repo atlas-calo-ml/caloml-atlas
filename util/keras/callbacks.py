@@ -18,8 +18,7 @@ def Checkpoint(modelfile, monitor='val_loss', save_best_only=False,save_freq='ep
 
 # Log our trainng metrics (loss etc.) in a CSV file.
 def Logger(modelfile, append=True):
-    if('.h5' in modelfile): history_filename = '.'.join(modelfile.split('.')[:-1]) + '.csv'
-    else: history_filename = modelfile + '.csv' # if using .tf format, there won't be a file extension on the string at all.    
+    history_filename = '.'.join(modelfile.split('.')[:-1]) + '.csv'
     return tf.keras.callbacks.CSVLogger(
         filename=history_filename,
         append=append
@@ -57,10 +56,13 @@ def EarlyStop(monitor='val_loss', min_delta=.01, patience=2, verbose=1, restore_
     
 
 # -- ... and a function that simply returns a default set of them! --
-def GetCallbacks(modelfile, append=True, use_decay=True, use_clr=False, use_stopping=True, **kwargs):
+def GetCallbacks(modelfile, append=True, use_decay=True, use_clr=False, use_stopping=True, use_checkpoint=True, **kwargs):
     
-    checkpt = Checkpoint(modelfile, save_best_only=use_stopping)
-    callbacks = [checkpt]
+    callbacks = []
+    
+    if(use_checkpoint):
+        checkpt = Checkpoint(modelfile, save_best_only=use_stopping)
+        callbacks.append(checkpt)
     
     lrl = LrLog()
     logger = Logger(modelfile,append)

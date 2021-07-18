@@ -2,6 +2,8 @@ import os, pathlib
 import pandas as pd
 from tensorflow.keras import Model # not sure if really needed?
 from tensorflow.keras.models import load_model
+from tensorflow.data import Dataset, Options
+import tensorflow as tf
 
 # Given some input, indices, and a model filename,
 # train an instance of the given model,
@@ -13,47 +15,75 @@ def TrainNetwork(model,
                  callbacks = [],
                  sample_weight = None,
                  epochs=20, batch_size=200, verbose=1, 
-                 overwriteModel=False, finishTraining=True,
-                 custom_objects = {}):
+                 overwriteModel=False, finishTraining=False,
+                 custom_objects = None):
     
-    model, custom_objects = model.model(), model.custom_objects
-    
+    # If no custom_objects provided, assume model type is our custom class, that packages the custom_objects with the model.
+    if(custom_objects is None): model, custom_objects = model.model(), model.custom_objects
+        
     # make the directory in which we save the model file
     model_dir = '/'.join(modelfile.split('/')[:-1])
     try: os.makedirs(model_dir)
     except: pass
         
     # Check if the model exists -- and load it if not overwriting.
-    # TODO: Maybe consider a neater way to deal with different file extensions (or lack thereof)?
-    history_filename = 0
-    if('.h5' in modelfile): history_filename = '.'.join(modelfile.split('.')[:-1]) + '.csv'
-    else: history_filename = modelfile + '.csv' # if using .tf format, there won't be a file extension on the string at all.
+#     if('.h5' or '.tf' in modelfile): history_filename = '.'.join(modelfile.split('.')[:-1]) + '.csv'
+#     else: history_filename = modelfile + '.csv' # if using .tf format, there won't be a file extension on the string at all.
+    history_filename = '.'.join(modelfile.split('.')[:-1]) + '.csv'    
+    
     initial_epoch = 0
+    
+    do_training = True    
     if(pathlib.Path(modelfile).exists() and not overwriteModel):
         
         # If loading a model with custom layers, we need to pass a dictionary of custom layers to load_model.
         # This is very annoying -- it can be skipped if *not* saving to HDF5, but HDF5 is a convenient format
         # in that it gives us a single file, and we should support the option anyway.
-        
-        model = load_model(modelfile, custom_objects=custom_objects)
-        
-        # Now we want to figure out for how many epochs the loaded model was already trained,
-        # so that it's trained, in total, for the requested number of epochs.
-        # keras models don't seem to hold on to an epoch attribute for whatever reason,
-        # so we will figure out the current epoch based on CSVLogger output if it exists.
-        if(pathlib.Path(history_filename).exists()):            
-            with open(history_filename) as f:
-                for i,l in enumerate(f):
-                    pass
-                initial_epoch = i
-         
-    history = 0
+        try: 
+            model = load_model(modelfile, custom_objects=custom_objects)
+            print('Successfully loaded model at {}'.format(modelfile))
+             # Now we want to figure out for how many epochs the loaded model was already trained,
+            # so that it's trained, in total, for the requested number of epochs.
+            # keras models don't seem to hold on to an epoch attribute for whatever reason,
+            # so we will figure out the current epoch based on CSVLogger output if it exists.
+            if(pathlib.Path(history_filename).exists()):            
+                with open(history_filename) as f:
+                    for i,l in enumerate(f):
+                        pass
+                    initial_epoch = i
+            if(not finishTraining): do_training = False
     
+        except:
+            print('Warning: Found modelfile {}, but could not load the model from it.'.format(modelfile))
+            if(overwriteModel): 
+                print('Will retrain and save to this file.')
+                pass
+            else: 
+                print('Aborting to avoid overwriting file {}.'.format(modelfile))
+                assert(False)
+               
+
     # Train the model if we've specified "finishTraining", or if we don't even
     # have a model yet. Setting finishTraining=False lets one immediately skip
     # to evaluating the model, which is especially helpful if EarlyStopping was used
     # and the final model didn't reach the specified last epoch.
-    if(finishTraining or not pathlib.Path(modelfile).exists()):
+    if(do_training):
+        
+#         # For TensorFlow 2.4+, we need to wrap our data in a TF data object
+#         # to avoid some warnings about "sharding" in certain cases.
+#         # See https://stackoverflow.com/a/65344405/14765225
+#         train_data = Dataset.from_tensor_slices((x_train, y_train))
+#         valid_data = Dataset.from_tensor_slices((x_valid, y_valid))
+#         train_data = train_data.batch(batch_size)
+#         valid_data = valid_data.batch(batch_size)
+        
+#         # Disable AutoShard.
+#         options = Options()
+#         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+#         train_data = train_data.with_options(options)
+#         valid_data = valid_data.with_options(options)
+
+        # TODO: The use of tf.data.Dataset causes validation to stop working (val_acc stuck at 0.5). Why?
         
         if(sample_weight == None): sample_weight=(None,None)        
         history = model.fit(
@@ -98,7 +128,7 @@ def TrainNetwork(model,
             history[key] = df[key].to_numpy()
         
     else:
-        print('Warning: No log file found for model {}.'.format())
+        print('Warning: No log file found for model {}.'.format(modelfile))
         print('This may result in an empty/incomplete history being returned.')
         print('Please provide a CSVLogger callback to prevent this in the future.')
 

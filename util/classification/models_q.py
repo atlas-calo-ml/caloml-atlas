@@ -6,7 +6,6 @@ from tensorflow.keras.layers import Input, Add, Concatenate, Dense, Dropout, Act
 from tensorflow.keras.layers.experimental.preprocessing import RandomFlip
 from string import ascii_lowercase
 
-
 # Custom layers.
 from util.keras.layers import *
 

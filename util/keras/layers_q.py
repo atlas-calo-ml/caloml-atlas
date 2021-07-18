@@ -5,12 +5,11 @@
 # This code also appears to match tf.keras source code for ResNet50 implementation.
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Layer
-from tensorflow_model_optimization.python.core.sparsity.keras.prunable_layer import PrunableLayer
+from tensorflow.keras import layers
 from tensorflow.keras.layers import Input, Add, Dense, Activation, ZeroPadding2D, BatchNormalization, Flatten, Conv2D, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
 from tensorflow.keras.initializers import glorot_uniform
-
-class IdentityBlock(Layer):
+from qkeras import * # qkeras for quantization
+class QIdentityBlock(layers.Layer):
     """
     Implementation of the ResNet identity block.
     
@@ -41,16 +40,16 @@ class IdentityBlock(Layer):
         self.F1, self.F2, self.F3 = self.filters
 
         # create the inner layers here
-        self.conv1 = Conv2D(filters = self.F1, kernel_size = (1, 1),\
-                            strides = (1,1), padding = 'valid', name = conv_name_base + '2a', kernel_initializer = glorot_uniform(seed=0))
-        self.conv2 = Conv2D(filters = self.F2, kernel_size = (self.f, self.f),\
-                            strides = (1,1), padding = 'same',  name = conv_name_base + '2b', kernel_initializer = glorot_uniform(seed=0))
-        self.conv3 = Conv2D(filters = self.F3, kernel_size = (1, 1),\
-                            strides = (1,1), padding = 'valid', name = conv_name_base + '2c', kernel_initializer = glorot_uniform(seed=0))
+        self.conv1 = QConv2D(filters = self.F1, kernel_size = (1, 1), strides = (1,1), padding = 'valid', name = conv_name_base + '2a', 
+                             kernel_initializer = glorot_uniform(seed=0), kernel_quantizer='stochastic_ternary', bias_quantizer='ternary')
+        self.conv2 = QConv2D(filters = self.F2, kernel_size = (self.f, self.f), strides = (1,1), padding = 'same',  name = conv_name_base + '2b', 
+                             kernel_initializer = glorot_uniform(seed=0), kernel_quantizer='stochastic_ternary', bias_quantizer='ternary')
+        self.conv3 = QConv2D(filters = self.F3, kernel_size = (1, 1),strides = (1,1), padding = 'valid', name = conv_name_base + '2c', 
+                             kernel_initializer = glorot_uniform(seed=0), kernel_quantizer='stochastic_ternary', bias_quantizer='ternary')
         
-        self.bn1 = BatchNormalization(axis = 3, name = bn_name_base + '2a')
-        self.bn2 = BatchNormalization(axis = 3, name = bn_name_base + '2b')
-        self.bn3 = BatchNormalization(axis = 3, name = bn_name_base + '2c')
+        self.bn1 = QBatchNormalization(axis = 3, name = bn_name_base + '2a')
+        self.bn2 = QBatchNormalization(axis = 3, name = bn_name_base + '2b')
+        self.bn3 = QBatchNormalization(axis = 3, name = bn_name_base + '2c')
         
         self.add = Add()
 
@@ -58,18 +57,18 @@ class IdentityBlock(Layer):
         X_shortcut = inputs
         X = self.conv1(inputs)
         if(self.normalization): X = self.bn1(X)
-        X = tf.nn.relu(X)
-        
+        X = QActivation('quantized_relu(3)')(X)
+
         X = self.conv2(X)
         if(self.normalization): X = self.bn2(X)
-        X = tf.nn.relu(X)
+        X = QActivation('quantized_relu(3)')(X)
 
         X = self.conv3(X)
         if(self.normalization): X = self.bn3(X)
-        X = tf.nn.relu(X)
+        X = QActivation('quantized_relu(3)')(X)
 
         X = self.add([X, X_shortcut])
-        X = tf.nn.relu(X)
+        X = QActivation('quantized_relu(3)')(X)
         return X
     
     def get_config(self):
@@ -84,12 +83,8 @@ class IdentityBlock(Layer):
             }
         )
         return config
-    
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
-    
-class ConvolutionBlock(Layer):
+
+class ConvolutionBlock(layers.Layer):
     """
     Implementation of the ResNet convolutional block.
     
@@ -122,19 +117,19 @@ class ConvolutionBlock(Layer):
         self.F1, self.F2, self.F3 = self.filters
 
         # create the inner layers here
-        self.conv1 = Conv2D(filters = self.F1, kernel_size = (1, 1),\
-                            strides = (self.s,self.s), padding = 'valid', name = conv_name_base + '2a', kernel_initializer = glorot_uniform(seed=0))
-        self.conv2 = Conv2D(filters = self.F2, kernel_size = (self.f, self.f),\
-                            strides = (1,1),           padding = 'same',  name = conv_name_base + '2b', kernel_initializer = glorot_uniform(seed=0))
-        self.conv3 = Conv2D(filters = self.F3, kernel_size = (1, 1),\
-                            strides = (1,1),           padding = 'valid', name = conv_name_base + '2c', kernel_initializer = glorot_uniform(seed=0))
-        self.conv1b = Conv2D(filters = self.F3, kernel_size = (1, 1),\
-                             strides = (self.s,self.s), padding = 'valid', name = conv_name_base + '1', kernel_initializer = glorot_uniform(seed=0))
+        self.conv1 = QConv2D(filters = self.F1, kernel_size = (1, 1), strides = (self.s,self.s), padding = 'valid', name = conv_name_base + '2a', 
+                             kernel_initializer = glorot_uniform(seed=0), kernel_quantizer='stochastic_ternary', bias_quantizer='ternary')
+        self.conv2 = QConv2D(filters = self.F2, kernel_size = (self.f, self.f), strides = (1,1), padding = 'same',  name = conv_name_base + '2b', 
+                             kernel_initializer = glorot_uniform(seed=0), kernel_quantizer='stochastic_ternary', bias_quantizer='ternary')
+        self.conv3 = Conv2D(filters = self.F3, kernel_size = (1, 1),strides = (1,1), padding = 'valid', name = conv_name_base + '2c', 
+                            kernel_initializer = glorot_uniform(seed=0), kernel_quantizer='stochastic_ternary', bias_quantizer='ternary')
+        self.conv1b = Conv2D(filters = self.F3, kernel_size = (1, 1), strides = (self.s,self.s), padding = 'valid', name = conv_name_base + '1', 
+                             kernel_initializer = glorot_uniform(seed=0), kernel_quantizer='stochastic_ternary', bias_quantizer='ternary')
         
-        self.bn1 = BatchNormalization(axis = 3, name = bn_name_base + '2a')
-        self.bn2 = BatchNormalization(axis = 3, name = bn_name_base + '2b')
-        self.bn3 = BatchNormalization(axis = 3, name = bn_name_base + '2c')
-        self.bn1b = BatchNormalization(axis = 3, name = bn_name_base + '1')
+        self.bn1 = QBatchNormalization(axis = 3, name = bn_name_base + '2a')
+        self.bn2 = QBatchNormalization(axis = 3, name = bn_name_base + '2b')
+        self.bn3 = QBatchNormalization(axis = 3, name = bn_name_base + '2c')
+        self.bn1b = QBatchNormalization(axis = 3, name = bn_name_base + '1')
 
         self.add = Add()
 
@@ -142,22 +137,22 @@ class ConvolutionBlock(Layer):
         X_shortcut = inputs
         X = self.conv1(inputs)
         if(self.normalization): X = self.bn1(X)
-        X = tf.nn.relu(X)
+        X = QActivation('quantized_relu(3)')(X)
         
         X = self.conv2(X)
         if(self.normalization): X = self.bn2(X)
-        X = tf.nn.relu(X)
+        X = QActivation('quantized_relu(3)')(X)
 
         X = self.conv3(X)
         if(self.normalization): X = self.bn3(X)
-        X = tf.nn.relu(X)
-        
+        X = QActivation('quantized_relu(3)')(X)
+
         X_shortcut = self.conv1b(X_shortcut)
         if(self.normalization): X_shortcut = self.bn1b(X_shortcut)
         X_shortcut = tf.nn.relu(X_shortcut)
         
         X = self.add([X, X_shortcut])
-        X = tf.nn.relu(X)
+        X = QActivation('quantized_relu(3)')(X)
         return X
     
     def get_config(self):
@@ -173,12 +168,8 @@ class ConvolutionBlock(Layer):
             }
         )
         return config
-    
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
-    
-class ImageScaleBlock(Layer):
+
+class ImageScaleBlock(layers.Layer):
     def __init__(self, new_shape, normalization=True, name_prefix='scaled_input_', method='nearest', **kwargs):
         super(ImageScaleBlock, self).__init__(**kwargs) # god knows what this does...
         
@@ -221,12 +212,8 @@ class ImageScaleBlock(Layer):
         )
         return config
     
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
-    
 # A simple layer for normalizing a tensor's integral.
-class NormalizationBlock(Layer, PrunableLayer):
+class NormalizationBlock(layers.Layer):
     def __init__(self, axes, scaling=1.0, name_prefix='normalization_', **kwargs):
         super(NormalizationBlock, self).__init__(**kwargs) # god knows what this does...
         
@@ -253,10 +240,3 @@ class NormalizationBlock(Layer, PrunableLayer):
             }
         )
         return config
-    
-    @classmethod
-    def from_config(cls, config):
-        return cls(**config)
-    
-    def get_prunable_weights(self):
-        return []
