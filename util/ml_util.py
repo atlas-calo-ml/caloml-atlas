@@ -121,7 +121,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
             
         # Filter out clusters that do not pass some cut.
         if(cut_distributions != []):
-            selected_indices = {key: np.full(len(arrays[key]),True,dtype=np.bool) for key in keys}
+            selected_indices = {key: np.full(len(arrays[key]),True,dtype=bool) for key in keys}
             
             for i, cut_distrib in enumerate(cut_distributions):
                 if(verbose): print('Applying cut on distribution: {}.'.format(cut_distrib))
@@ -185,7 +185,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
 
         # Make a boolean mask from the indices. This speeds things up below, as opposed to passing (unsorted) lists of indices.
         for key in indices.keys():
-            msk = np.zeros(len(arrays[key]),dtype=np.bool)
+            msk = np.zeros(len(arrays[key]),dtype=bool)
             msk[indices[key]] = True
             indices[key] = msk
     

@@ -1,12 +1,71 @@
 # Utilities for jet clustering, plotting jet kinematics et cetera. These are functions used in our jet-clustering workflow,
 # so some many not have to do *explicitly* with jets (e.g. there might be some stuff for plotting topo-cluster predicted energies).
 # Note that functions that are purely for convenience will be placed in qol_util.py.
-import sys, uuid
+import sys, os, glob, uuid
 import ROOT as rt
 import uproot as ur
 import numpy as np
+import subprocess as sub
 from numba import jit
 from util import qol_util as qu
+
+# Fastjet setup.
+def BuildFastjet(fastjet_dir=None, j=4, force=False, verbose=False):
+    if(fastjet_dir is None):
+        fastjet_dir = os.path.dirname(os.path.abspath(__file__)) + '/../fastjet'
+        
+    # Check if Fastjet is already built at destination.
+    # Specifically, we will look for some Python-related files.
+    if(not force):
+        
+        files_to_find = [
+            '{}/**/site-packages/fastjet.py'.format(fastjet_dir),
+            '{}/**/site-packages/_fastjet.a'.format(fastjet_dir),
+            '{}/**/site-packages/_fastjet.so.0'.format(fastjet_dir)
+        ]
+        
+        files_to_find = [glob.glob(x,recursive=True) for x in files_to_find]
+        files_to_find = [len(x) for x in files_to_find]
+        if(0 not in files_to_find):
+            if(verbose): print('Found existing Fastjet installation with Python extension @ {}.'.format(fastjet_dir))
+            return fastjet_dir
+    
+    # Make the Fastjet dir if it does not exist.
+    try: os.makedirs(fastjet_dir)
+    except: pass
+    
+    # Put output into log files.
+    logfile = '{}/log.stdout'.format(fastjet_dir)
+    errfile = '{}/log.stderr'.format(fastjet_dir)
+    
+    with open(logfile,'w') as f, open(errfile,'w') as g:
+    
+        # Fetch the Fastjet source
+        fastjet_download = 'http://fastjet.fr/repo/fastjet-3.4.0.tar.gz'
+        print('Downloading fastjet from {}.'.format(fastjet_download))
+        sub.check_call(['wget', fastjet_download], 
+                       shell=False, cwd=fastjet_dir, stdout=f, stderr=g)
+        sub.check_call(['tar', 'zxvf', 'fastjet-3.4.0.tar.gz'], 
+                       shell=False, cwd=fastjet_dir, stdout=f, stderr=g)
+        sub.check_call(['rm', 'fastjet-3.4.0.tar.gz'], 
+                       shell=False, cwd=fastjet_dir, stdout=f, stderr=g)
+
+        source_dir  = '{}/fastjet-3.4.0'.format(fastjet_dir)
+        install_dir = '{}/fastjet-install'.format(fastjet_dir)
+
+        # Now configure. We create the python bindings.
+        print('Configuring fastjet.')
+        sub.check_call(['./configure', '--prefix={}'.format(install_dir), '--enable-pyext'], 
+                       shell=False, cwd=source_dir, stdout=f, stderr=g)
+
+        # Now make and install. Will skip "make check".
+        print('Making fastjet.')
+        sub.check_call(['make', '-j{}'.format(j)], 
+                       shell=False, cwd=source_dir, stdout=f, stderr=g)
+        print('Installing fastjet.')
+        sub.check_call(['make', 'install'], 
+                       shell=False, cwd=source_dir, stdout=f, stderr=g)
+    return install_dir
 
 # Polar to Cartesian, for circumventing TLorentzVector (etc) usage.
 @jit
@@ -43,19 +102,19 @@ def ClusterJets(ur_trees, jet_name, R, pt_min, eta_max, fj_dir, classification_t
     for dfile, trees in ur_trees.items():
         
         # event info - which clusters belong to a given event
-        cluster_min = trees['event'].array('clusterCount')
-        cluster_max = cluster_min + trees['event'].array('nCluster') - 1
+        cluster_min = trees['event']['clusterCount'].array().to_numpy()
+        cluster_max = cluster_min + trees['event']['nCluster'].array().to_numpy() - 1
     
         # Reco cluster info. Excluding the energy, which will be packaged separately below.
-        cluster_vec = np.column_stack(tuple(trees['cluster'].arrays(['clusterPt','clusterEta','clusterPhi','clusterE']).values()))
+        cluster_vec = np.column_stack(tuple(trees['cluster'].arrays(['clusterPt','clusterEta','clusterPhi','clusterE'],library='np').values()))
     
         if(energy_branch == None or energy_tree_key == None):
             # Topo-cluster classifications for all of the clusters in this file.
-            cluster_classification = trees['score'].array('charged_likelihood_combo')
+            cluster_classification = trees['score']['charged_likelihood_combo'].array()
             # Topo-cluster regressed energies for all clusters in this file (regressions assuming cluster comes from charged/neutral pion)
-            cluster_energies = np.column_stack(tuple(trees['score'].arrays(['clusterE_charged','clusterE_neutral']).values()))
+            cluster_energies = np.column_stack(tuple(trees['score'].arrays(['clusterE_charged','clusterE_neutral'],library='np').values()))
         
-        else: cluster_energies = trees[energy_tree_key].array(energy_branch)
+        else: cluster_energies = trees[energy_tree_key][energy_branch].array()
 
         # ROOT access to the file -- we are making a new tree to save the jet information.
         f = rt.TFile(dfile, 'UPDATE')
@@ -208,11 +267,11 @@ def MatchRecoJets(ur_trees, jet_defs, R, eta_max, truth_e_min, tree_name = 'JetM
         jet_indices = {key: np.abs(x) <= eta_max for key,x in eta.items()}
     
         # Apply our truth jet energy cut. Recall that jets have things stored in MeV for now, whereas the cut is in GeV.
-        truth_energy = tree[jet_defs['Truth'][0]].array(jet_defs['Truth'][1] + 'E')
+        truth_energy = tree[jet_defs['Truth'][0]][jet_defs['Truth'][1] + 'E'].array()
         jet_indices['Truth'] = jet_indices['Truth'] * (truth_energy >= scaling_factor * truth_e_min)
     
         # We will also need phi info for performing the matching.
-        phi = {key:tree[val[0]].array(val[1] + 'Phi') for key, val in jet_defs.items()}
+        phi = {key:tree[val[0]][val[1] + 'Phi'].array() for key, val in jet_defs.items()}
 
         nevents = ur_trees[dfile]['event'].numentries
         for i in range(nevents):
@@ -298,12 +357,12 @@ def PlotEnergyRatio(ur_trees, reco_jet_defs, colors, truth_jet_def='AntiKt4Truth
 
     # now loop through our files and fill the trees
     for dfile, tree in ur_trees.items():
-        truth_energy = tree['event'].array(truth_jet_def + 'E')
+        truth_energy = tree['event'][truth_jet_def + 'E'].array()
     
         # make a histogram for each reco jet definition
         for key, rdef in reco_jet_defs.items():
-            reco_energy = tree[rdef[0]].array(rdef[1] + 'E')
-            reco_match  = tree['jet_match'].array(rdef[1] + 'Match')
+            reco_energy = tree[rdef[0]][rdef[1] + 'E'].array()
+            reco_match  = tree['jet_match'][rdef[1] + 'Match'].array()
         
             # looping through events in this file (these are jagged arrays)
             for i in range(len(reco_match)):
