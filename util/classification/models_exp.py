@@ -68,7 +68,7 @@ class exp_cnn_model():
         output = Dense(2, activation='softmax')(X)
         
         model = Model(inputs=inputs, outputs=output)
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model
 
@@ -171,6 +171,6 @@ class exp_merged_model():
 
         model = Model(inputs = [EMB1, EMB2, EMB3, TB0, TB1, TB2], outputs = [output])
         # compile model
-        optimizer = Adam(lr=lr)
+        optimizer = Adam(learning_rate=lr)
         model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['acc'])
         return model

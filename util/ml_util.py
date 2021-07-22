@@ -108,10 +108,20 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         hf.close()
         
     else:
-        arrays = {
-            key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in branches)
-            for key,rfile_match in root_file_dict.items()        
-        }
+        
+        # root_file_dict entries might be glob-style strings, or lists of files. We should consider both possibilities.
+        arrays = {}
+        
+        for key,root_files in root_file_dict.items():
+            if(type(root_files) == list):
+                arrays[key] = ur.lazy([':'.join((x,cluster_tree)) for x in root_files], filter_branch=lambda x: x.name in branches)
+            else:
+                arrays[key] = ur.lazy(':'.join((root_files, cluster_tree)), filter_branch=lambda x: x.name in branches)
+        
+#         arrays = {
+#             key: ur.lazy(':'.join((rfile_match, cluster_tree)), filter_branch=lambda x: x.name in branches)
+#             for key,rfile_match in root_file_dict.items()        
+#         }
 
         # Create indices for selected clusters.
         # "indices[key]" will hold a list of indices themselves (*not* booleans). E.g. [0, 1, 4, 9]
@@ -204,7 +214,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
     
         # Re-make the arrays with just our layer info (using our selection indices again).
         arrays = {
-            key: ur.lazy(':'.join((rfile_match, cluster_tree)), branch_filter=lambda x: x.name in layers)[indices[key]]
+            key: ur.lazy(':'.join((rfile_match, cluster_tree)), filter_branch=lambda x: x.name in layers)[indices[key]]
             for key,rfile_match in root_file_dict.items()        
         }   
         
@@ -299,7 +309,7 @@ def splitFrameTVT(frame,
         f.close()
     return
       
-def setupScalers(pdata, branch_names, scaler_file=''):
+def setupScalers(pdata, branch_names, scaler_file='', scaled_variable_prefix='s'):
     compute_scalers = True
     # load scalers from file if it exists
     if(scaler_file != '' and pathlib.Path(scaler_file).exists()):
@@ -328,7 +338,7 @@ def setupScalers(pdata, branch_names, scaler_file=''):
     # apply scalers to pdata
     for key,frame in pdata.items():
         for branch in branch_names:
-            frame['s_{}'.format(branch)] = scalers[key][branch].transform(frame[branch].to_numpy().reshape(-1,1))
+            frame['{}_{}'.format(scaled_variable_prefix, branch)] = scalers[key][branch].transform(frame[branch].to_numpy().reshape(-1,1))
     return scalers
     
 def setupCells(arrays, layer, nrows = -1, indices = [], flatten=True):

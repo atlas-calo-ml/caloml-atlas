@@ -8,10 +8,10 @@ from tensorflow.keras.models import load_model
 # train a single model.
 def TrainNetwork(model, 
                  modelfile, 
-                 x_train, y_train, 
-                 x_valid, y_valid, 
-                 sample_weight, 
-                 callbacks,
+                 x_train=None, y_train=None, 
+                 x_valid=None, y_valid=None, 
+                 sample_weight=None, 
+                 callbacks=[],
                  epochs=20, batch_size=200, verbose=1, 
                  overwriteModel=False, finishTraining=True):
     

@@ -137,7 +137,9 @@ class PlotStyle:
         
         # grid color
         ax.grid()
-
+        
+        # face color
+        ax.set_facecolor(self.canv_plt)
 
 # Setting a histogram's line and fill color in one go
 def SetColor(hist, color, alpha = 1., style=0):

@@ -10,8 +10,8 @@ import tensorflow as tf
 # or load the model if it already exists.
 def TrainNetwork(model, 
                  modelfile, 
-                 x_train, y_train, 
-                 x_valid, y_valid, 
+                 x_train=None, y_train=None, 
+                 x_valid=None, y_valid=None, 
                  callbacks = [],
                  sample_weight = None,
                  epochs=20, batch_size=200, verbose=1, 
