@@ -81,7 +81,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                   balance_data=True, n_max=-1, 
                   cut_distributions=[], cut_values=[], cut_types=[],
                   match_distribution='', match_binning=(), match_log=False,
-                  verbose=False, load=False, save=False, filename=''):
+                  verbose=False, load=False, save=False, filename='', return_indices=False):
 
     indices = {}
     pdata = {}
@@ -91,8 +91,10 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
 
     pdata_filename = filename + '_frame.h5'
     pcell_filename = filename + '_images.h5'
-    
+    selec_filename = filename + '_selections.h5'
+
     if(load and pathlib.Path(pdata_filename).exists() and pathlib.Path(pcell_filename).exists()):
+        
         if(verbose): print('Loading pandas DataFrame and calo images from {} and {}.'.format(pdata_filename,pcell_filename))
         # Load the DataFrame and images from disk.
         pdata = {
@@ -107,6 +109,12 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                 pcells[key][layer] = hf['{}:{}'.format(key,layer)][:]
         hf.close()
         
+        if(return_indices): # TODO: Rework this a little!
+            hf = h5.File(selec_filename,'r')
+            for key in keys:
+                indices[key] = hf[key][:]
+            hf.close()
+            
     else:
         
         # root_file_dict entries might be glob-style strings, or lists of files. We should consider both possibilities.
@@ -117,11 +125,6 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                 arrays[key] = ur.lazy([':'.join((x,cluster_tree)) for x in root_files], filter_branch=lambda x: x.name in branches)
             else:
                 arrays[key] = ur.lazy(':'.join((root_files, cluster_tree)), filter_branch=lambda x: x.name in branches)
-        
-#         arrays = {
-#             key: ur.lazy(':'.join((rfile_match, cluster_tree)), filter_branch=lambda x: x.name in branches)
-#             for key,rfile_match in root_file_dict.items()        
-#         }
 
         # Create indices for selected clusters.
         # "indices[key]" will hold a list of indices themselves (*not* booleans). E.g. [0, 1, 4, 9]
@@ -213,10 +216,13 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         }
     
         # Re-make the arrays with just our layer info (using our selection indices again).
-        arrays = {
-            key: ur.lazy(':'.join((rfile_match, cluster_tree)), filter_branch=lambda x: x.name in layers)[indices[key]]
-            for key,rfile_match in root_file_dict.items()        
-        }   
+        arrays = {}
+        for key,root_files in root_file_dict.items():
+            if(type(root_files) == list):
+                arrays[key] = ur.lazy([':'.join((x,cluster_tree)) for x in root_files], filter_branch=lambda x: x.name in layers)[indices[key]]
+            else:
+                arrays[key] = ur.lazy(':'.join((root_files, cluster_tree)), filter_branch=lambda x: x.name in layers)[indices[key]]
+
         
         # Make our calorimeter images.
         nentries = len(keys) * len(layers)
@@ -244,7 +250,16 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
                 for layer in layers:
                     dset = hf.create_dataset('{}:{}'.format(key,layer), data=pcells[key][layer], chunks=True, compression='gzip', compression_opts=7)
             hf.close()
-    return pdata, pcells    
+            
+    # One may optionally also save the selected event indices. This can be useful if referring back to the original data source.
+    if(return_indices):
+        # Save the indices to a file.
+        hf = h5.File(selec_filename, 'w')
+        for key in indices.keys():
+            dset = hf.create_dataset(key, data=indices[key], chunks=True, compression='gzip', compression_opts=7)
+        hf.close()
+        return pdata, pcells, indices # return indices
+    return pdata, pcells # don't return indices
 
 def splitFrameTVT(frame,
                   trainlabel='train', trainfrac=0.8, 

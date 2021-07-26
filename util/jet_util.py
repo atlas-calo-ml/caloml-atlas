@@ -68,12 +68,13 @@ def BuildFastjet(fastjet_dir=None, j=4, force=False, verbose=False):
     return install_dir
 
 # Polar to Cartesian, for circumventing TLorentzVector (etc) usage.
-@jit
 def Polar2Cartesian(pt,eta,phi,e):
     px = pt * np.cos(phi)
     py = pt * np.sin(phi)
     pz = pt * np.sinh(eta)
-    return np.array([px,py,pz,e],dtype=np.dtype('f8'))
+    return np.array([px,py,pz,e],dtype=np.dtype('f8')).T
+
+#TODO: Functions below this are old, need to be removed/reworked.
 
 # Perform jet clustering. The "energy" parameter determines
 # the name of the branch used for topo-cluster energies. If
