@@ -119,7 +119,6 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         
         # root_file_dict entries might be glob-style strings, or lists of files. We should consider both possibilities.
         arrays = {}
-        
         for key,root_files in root_file_dict.items():
             if(type(root_files) == list):
                 arrays[key] = ur.lazy([':'.join((x,cluster_tree)) for x in root_files], filter_branch=lambda x: x.name in branches)
@@ -130,7 +129,6 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         # "indices[key]" will hold a list of indices themselves (*not* booleans). E.g. [0, 1, 4, 9]
         # Thus its length will decrease as we remove events from our selection.
         for key in keys: indices[key] = np.arange(0,len(arrays[key]))
-        #for key in keys: indices[key] = np.full(len(arrays[key]),True,dtype=bool)
             
         # Filter out clusters that do not pass some cut.
         if(cut_distributions != []):

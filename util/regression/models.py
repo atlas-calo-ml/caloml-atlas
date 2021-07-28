@@ -294,6 +294,7 @@ class resnet():
         
         # Input images -- one for each channel, each channel's dimensions may be different.
         inputs = [Input((None,None,1),name='input_'+str(i)) for i in range(channels)]
+        energy_input = Input((1),name='energy')
         eta_input = Input((1),name='eta')
 
         # Rescale all the input images, so that their dimensions now match.
@@ -335,17 +336,17 @@ class resnet():
         elif(X.shape[2] == 1): pool_size = (2,1)
         X = AveragePooling2D(pool_size=pool_size, name="avg_pool")(X)
         
-        # Transition into output: Add eta info, and use a simple DNN.
+        # Transition into output: Add energy and eta info, and use a simple DNN.
         X = Flatten()(X)
-        tensor_list = [X,eta_input]
+        tensor_list = [X,energy_input, eta_input]
         X = Concatenate(axis=1)(tensor_list)
         units = X.shape[1]
         X = Dense(units=units, activation='relu',name='Dense1')(X)
-        X = Dense(units=int(units/4), activation='relu',name='Dense2')(X)
+        X = Dense(units=units, activation='relu',name='Dense2')(X)
         X = Dense(units=1, activation='linear', name='output', kernel_initializer='normal')(X)
 
         # Create model object.
-        input_list = inputs + [eta_input]
+        input_list = inputs + [energy_input, eta_input]
         model = Model(inputs=input_list, outputs=X, name='ResNet')
 
         # Compile the model

@@ -6,11 +6,12 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
-from tensorflow_model_optimization.python.core.sparsity.keras.prunable_layer import PrunableLayer
+from tensorflow_model_optimization.sparsity.keras import PrunableLayer
 from tensorflow.keras.layers import Input, Add, Dense, Activation, ZeroPadding2D, BatchNormalization, Flatten, Conv2D, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
 from tensorflow.keras.initializers import glorot_uniform
+from util.keras.calcs import LorentzOp
 
-class IdentityBlock(Layer):
+class IdentityBlock(Layer, PrunableLayer):
     """
     Implementation of the ResNet identity block.
     
@@ -89,7 +90,10 @@ class IdentityBlock(Layer):
     def from_config(cls, config):
         return cls(**config)
     
-class ConvolutionBlock(Layer):
+    def get_prunable_weights(self):
+        return self.conv1.get_weights() + self.conv2.get_weights() + self.conv3.get_weights()
+    
+class ConvolutionBlock(Layer, PrunableLayer):
     """
     Implementation of the ResNet convolutional block.
     
@@ -178,7 +182,10 @@ class ConvolutionBlock(Layer):
     def from_config(cls, config):
         return cls(**config)
     
-class ImageScaleBlock(Layer):
+    def get_prunable_weights(self):
+        return self.conv1.get_weights() + self.conv2.get_weights() + self.conv3.get_weights() + self.conv1b.get_weights()
+    
+class ImageScaleBlock(Layer, PrunableLayer):
     def __init__(self, new_shape, normalization=True, name_prefix='scaled_input_', method='nearest', **kwargs):
         super(ImageScaleBlock, self).__init__(**kwargs) # god knows what this does...
         
@@ -225,6 +232,9 @@ class ImageScaleBlock(Layer):
     def from_config(cls, config):
         return cls(**config)
     
+    def get_prunable_weights(self):
+        return []
+    
 # A simple layer for normalizing a tensor's integral.
 class NormalizationBlock(Layer, PrunableLayer):
     def __init__(self, axes, scaling=1.0, name_prefix='normalization_', **kwargs):
@@ -258,5 +268,41 @@ class NormalizationBlock(Layer, PrunableLayer):
     def from_config(cls, config):
         return cls(**config)
     
+    def get_prunable_weights(self):
+        return []
+    
+# A layer inspired by simplified LGN & LoLa.
+# This layer applies the LorentzOp to a set of vectors,
+# followed by some dense layers.
+class LorentzBlock(Layer, PrunableLayer):
+    def __init__(self, n_dense, name_prefix='lorentz_block_', **kwargs):
+        super(LorentzBlock, self).__init__(**kwargs)
+        
+        # retrieve attributes
+        self.n_dense = n_dense
+        self.name_prefix = name_prefix
+
+    def call(self, inputs):
+        x = LorentzOp(inputs)
+        units = x.shape[-1]
+        for i in range(self.n_dense):
+            x = Dense(units=units, activation='relu',name=name_prefix + 'Dense_{}'.format(i+1))(x)
+        return x
+                    
+    def get_config(self):
+        config = super(LorentzBlock, self).get_config()
+        config.update(
+            {
+                'n_dense':self.n_dense,
+                'name_prefix':self.name_prefix
+            }
+        )
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
+    
+    # TODO: restructure things to actually get the Dense layers' weights
     def get_prunable_weights(self):
         return []
