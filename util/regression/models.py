@@ -11,6 +11,7 @@ from string import ascii_lowercase
 
 # Custom layers.
 from util.keras.layers import *
+from util.ml_util import cell_meta
 #from util import ml_util as mu
 
 # A simple, fully-connected network architecture.
@@ -18,8 +19,7 @@ from util.keras.layers import *
 # plus the reco energy (possibly transformed by a logarithm),
 # and the eta of the cluster. (This is our baseline model).
 class baseline_nn_model(): 
-    def __init__(self, strategy, lr=5e-5, decay=1e-6, dropout=-1):
-        self.strategy = strategy
+    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1):
         self.dropout = dropout
         self.decay = decay
         self.lr = lr
@@ -29,29 +29,28 @@ class baseline_nn_model():
     def model(self):
         dropout = self.dropout
         decay = self.decay
-        strategy = self.strategy
         lr = self.lr
         number_pixels = 512 + 256 + 128 + 16 + 16 + 8
-        with strategy.scope():    
-            model = Sequential()
-            used_pixels = number_pixels + 2
-            model.add(Dense(used_pixels, input_dim=used_pixels, kernel_initializer='normal', activation='relu'))
-            if(dropout > 0.): model.add(Dropout(dropout))
-            model.add(Dense(used_pixels, activation='relu'))
-            if(dropout > 0.): model.add(Dropout(dropout))
-            model.add(Dense(int(used_pixels/2), activation='relu'))
-            if(dropout > 0.): model.add(Dropout(dropout))
-            model.add(Dense(units=1, kernel_initializer='normal', activation='linear'))
-            opt = Adam(lr=lr, decay=decay)
-            model.compile(optimizer=opt, loss='mse',metrics=['mae','mse'])
+#         with strategy.scope():    
+        model = Sequential()
+        used_pixels = number_pixels + 2
+        model.add(Dense(used_pixels, input_dim=used_pixels, kernel_initializer='normal', activation='relu'))
+        if(dropout > 0.): model.add(Dropout(dropout))
+        model.add(Dense(used_pixels, activation='relu'))
+        if(dropout > 0.): model.add(Dropout(dropout))
+        model.add(Dense(int(used_pixels/2), activation='relu'))
+        if(dropout > 0.): model.add(Dropout(dropout))
+        model.add(Dense(units=1, kernel_initializer='normal', activation='linear'))
+        opt = Adam(learning_rate=lr, decay=decay)
+        model.compile(optimizer=opt, loss='mse',metrics=['mae','mse'])
         return model 
 
 # A simple, fully-connected network architecture.
 # Inputs correspond to the reco energy, eta, as well as a vector
 # encoding the percentage of energy deposited in each calorimeter layer.
 class depth_network():
-    def __init__(self, strategy, units=8, depth=3, lr=5e-5, decay=1e-6, dropout=-1):
-        self.strategy = strategy
+    def __init__(self, units=8, depth=3, lr=5e-5, decay=1e-6, dropout=-1):
+        #self.strategy = strategy
         self.units = units
         self.depth = depth
         self.dropout = dropout
@@ -65,21 +64,21 @@ class depth_network():
         decay = self.decay
         units = self.units
         depth = self.depth
-        strategy = self.strategy
+        #strategy = self.strategy
         lr = self.lr
-        with strategy.scope():    
-            energy_input = Input(shape=(1,),name='energy')
-            eta_input    = Input(shape =(1,), name='eta')
-            depth_input = Input(shape=(6,),name='depth')
-            
-            input_list = [energy_input, eta_input, depth_input]
-            X = Concatenate(axis=1, name='concat')([energy_input, eta_input, depth_input])
-            for i in range(depth): X = Dense(units=units, activation='relu',name='Dense_{}'.format(i+1))(X)
-            X = Dense(units=1, kernel_initializer='normal', activation='linear')(X)
-            
-            optimizer = Adam(lr=lr, decay=decay)
-            model = Model(inputs=input_list, outputs=X, name='Simple')
-            model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
+        #with strategy.scope():    
+        energy_input = Input(shape=(1,),name='energy')
+        eta_input    = Input(shape =(1,), name='eta')
+        depth_input = Input(shape=(6,),name='depth')
+
+        input_list = [energy_input, eta_input, depth_input]
+        X = Concatenate(axis=1, name='concat')([energy_input, eta_input, depth_input])
+        for i in range(depth): X = Dense(units=units, activation='relu',name='Dense_{}'.format(i+1))(X)
+        X = Dense(units=1, kernel_initializer='normal', activation='linear')(X)
+
+        optimizer = Adam(learning_rate=lr, decay=decay)
+        model = Model(inputs=input_list, outputs=X, name='Simple')
+        model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model    
 
 # Simple CNN + Dense.
@@ -153,7 +152,7 @@ class simple_cnn():
         x = Dropout(dropout, name='full_dropout_4')(x)
         output = Dense(1, kernel_initializer='normal', activation='linear')(x)
         
-        optimizer = Adam(lr=lr, decay=decay)
+        optimizer = Adam(learning_rate=lr, decay=decay)
         model = Model(inputs=input_list, outputs=output, name='Simple_CNN')
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model
@@ -254,7 +253,7 @@ class split_emb_cnn():
         # final output
         output = Dense(units=1, kernel_initializer='normal', activation='linear')(x)
 
-        optimizer = Adam(lr=lr, decay=decay)
+        optimizer = Adam(learning_rate=lr, decay=decay)
         model = Model(inputs=input_list, outputs=output, name='Split_EMB_CNN')
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model
@@ -350,10 +349,56 @@ class resnet():
         model = Model(inputs=input_list, outputs=X, name='ResNet')
 
         # Compile the model
-        optimizer = Adam(lr=lr,decay=decay)
+        optimizer = Adam(learning_rate=lr,decay=decay)
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model
-
-
+    
+# class lorentz_model(): 
+#     def __init__(self,lr=5e-5, depth=5):
+#         self.lr = lr
+#         self.depth = depth
+#         self.custom_objects = {'LorentzBlock':LorentzBlock}
+    
+#     # create model
+#     def model(self):
+#         lr = self.lr
+#         depth = self.depth
         
+#         # Gather inputs -- the images, the reco energy and eta.
+#         inputs = {
+#             'EMB1':     Input(shape=(128, 4,1), name='input_0'),
+#             'EMB2':     Input(shape=( 16,16,1), name='input_1'),
+#             'EMB3':     Input(shape=(  8,16,1), name='input_2'),
+#             'TileBar0': Input(shape=(  4, 4,1), name='input_3'),
+#             'TileBar1': Input(shape=(  4, 4,1), name='input_4'),
+#             'TileBar2': Input(shape=(  2, 4,1), name='input_5'),
+#             'energy':   Input(shape=(1),        name='energy' ),
+#             'eta':      Input(shape=(1),        name='eta'    )
+#         }
         
+#         # We can immediately remove the channel dimension of the inputs, it is given by the data pipeline
+#         # but irrelevant for this particular architecture.
+#         for key in inputs.keys():
+#             inputs[key] = inputs[key].squeeze()
+        
+#         input_list = list(inputs.values())
+#         layers = ['EMB1','EMB2','EMB3','TileBar0','TileBar1','TileBar2']
+        
+#         X_list = []
+        
+#         for i,layer in enumerate(layers):
+            
+#             # Prepare the input. Vectors will be of the form (et, eta, phi, m=0).
+#             layer_shape = inputs[layer].shape[:3] # includes batch_size
+#             layer_shape_nb = layer_shape[1:] # no batch_size
+#             midpoint = tuple(layer_shape_nb/2) # gives the top-right pixel w.r.t. image center
+            
+#             d_eta = tf.zeros(tuple(layer_shape))
+            
+            
+            
+            
+#             X = LorentBlock()
+#         return model 
+
+    

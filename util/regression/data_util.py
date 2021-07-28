@@ -108,3 +108,16 @@ def DictionarySplit(rn_input, pdata, include_no_split=False):
         }
         
     return results
+
+# def LorentzInput(pdata, pcells, layers=None, branch_map={}, use_layer_names=False):
+    
+#     rn_input = ResnetInput(pdata,pcells,layers,branch_map,use_layer_names=True)
+#     keys = rn_input.keys()
+#     layers = list(mu.cell_meta.keys())
+#     layer_keys = ['input_{}'.format(x) for x in range(len(layers))]
+    
+#     for key in keys: # e.g. [pp, p0]
+
+#         for layer in layers:
+#             print('TODO')
+#     return
