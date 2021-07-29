@@ -9,7 +9,7 @@ from tensorflow.keras.layers import Layer
 from tensorflow_model_optimization.sparsity.keras import PrunableLayer
 from tensorflow.keras.layers import Input, Add, Dense, Activation, ZeroPadding2D, BatchNormalization, Flatten, Conv2D, AveragePooling2D, MaxPooling2D, GlobalMaxPooling2D
 from tensorflow.keras.initializers import glorot_uniform
-from util.keras.calcs import LorentzOp
+#from util.keras.calcs import LorentzOp
 
 class IdentityBlock(Layer, PrunableLayer):
     """
@@ -271,38 +271,61 @@ class NormalizationBlock(Layer, PrunableLayer):
     def get_prunable_weights(self):
         return []
     
-# A layer inspired by simplified LGN & LoLa.
-# This layer applies the LorentzOp to a set of vectors,
-# followed by some dense layers.
-class LorentzBlock(Layer, PrunableLayer):
-    def __init__(self, n_dense, name_prefix='lorentz_block_', **kwargs):
-        super(LorentzBlock, self).__init__(**kwargs)
-        
-        # retrieve attributes
-        self.n_dense = n_dense
+# A simple layer that performs an inner product (in Minkowski space).
+class LorentzLayer(Layer):
+    def __init__(self, name_prefix='lorentz_layer_', **kwargs):
+        super(LorentzLayer, self).__init__(**kwargs)
         self.name_prefix = name_prefix
-
-    def call(self, inputs):
-        x = LorentzOp(inputs)
-        units = x.shape[-1]
-        for i in range(self.n_dense):
-            x = Dense(units=units, activation='relu',name=name_prefix + 'Dense_{}'.format(i+1))(x)
-        return x
-                    
+        self.metric = tf.constant([-1.,-1.,-1.,1.])
+        
+    def call(self, x, y):
+        dot = tf.math.reduce_sum(tf.math.multiply(tf.math.multiply(x,y),self.metric),axis=-1)
+        return dot
+    
     def get_config(self):
-        config = super(LorentzBlock, self).get_config()
+        config = super(LorentzLayer, self).get_config()
         config.update(
             {
-                'n_dense':self.n_dense,
-                'name_prefix':self.name_prefix
+                'name_prefix':self.name_prefix,
+                'metric':self.metric
             }
         )
-        return config
+        return config   
     
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+# A layer inspired by simplified LGN & LoLa.
+# This layer applies the LorentzOp to a set of vectors,
+# producing a set of all possible dot products. It does not have any
+# trainable weights, but can be used with vector inputs to generate
+# Lorentz invariants on-the-fly (which can be passed into a standard DNN).
+class LorentzBlock(Layer):
+    def __init__(self, name_prefix='lorentz_block_', **kwargs):
+        super(LorentzBlock, self).__init__(**kwargs)
+        self.name_prefix = name_prefix
+        self.lorentz = LorentzLayer(name_prefix = self.name_prefix + 'llayer_')
+          
+    def call(self, x):
+        # x is a set of 4-vectors.
+        # Note that the first dimension will be batch size in practice,
+        # and the second dimension is the number of vectors.
+        n = x.shape[1]
+        #m =  (n * (n+1)) / 2 # unused
+        tensors = [self.lorentz(x[:,i,:],x[:,j,:]) for i in range(n) for j in range(i+1)]
+        x = tf.stack(tensors, axis=-1)
+        return x      
     
-    # TODO: restructure things to actually get the Dense layers' weights
-    def get_prunable_weights(self):
-        return []
+    def get_config(self):
+        config = super(LorentzBlock, self).get_config()
+        config.update(
+            {
+                'name_prefix':self.name_prefix
+            }
+        )
+        return config   
+        
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)

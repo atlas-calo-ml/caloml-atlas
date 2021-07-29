@@ -354,52 +354,42 @@ class resnet():
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model
     
-# class lorentz_model(): 
-#     def __init__(self,lr=5e-5, depth=5):
-#         self.lr = lr
-#         self.depth = depth
-#         self.custom_objects = {'LorentzBlock':LorentzBlock}
+class lorentz_net():    
+    def __init__(self,lr=5e-5, n_vecs=10, depth=5):
+        self.lr = lr
+        self.depth = depth
+        self.n_vecs = n_vecs
+        self.custom_objects = {'LorentzBlock':LorentzBlock}
     
-#     # create model
-#     def model(self):
-#         lr = self.lr
-#         depth = self.depth
+    # create model
+    def model(self):
+        lr = self.lr
+        depth = self.depth
+        n_vecs = self.n_vecs
         
-#         # Gather inputs -- the images, the reco energy and eta.
-#         inputs = {
-#             'EMB1':     Input(shape=(128, 4,1), name='input_0'),
-#             'EMB2':     Input(shape=( 16,16,1), name='input_1'),
-#             'EMB3':     Input(shape=(  8,16,1), name='input_2'),
-#             'TileBar0': Input(shape=(  4, 4,1), name='input_3'),
-#             'TileBar1': Input(shape=(  4, 4,1), name='input_4'),
-#             'TileBar2': Input(shape=(  2, 4,1), name='input_5'),
-#             'energy':   Input(shape=(1),        name='energy' ),
-#             'eta':      Input(shape=(1),        name='eta'    )
-#         }
+        # Gather inputs -- the images, the reco energy and eta.
+        input_layers = list(cell_meta.keys())
+        input_shape = (n_vecs,4)
+        inputs = {layer:Input(shape=input_shape,name=layer) for layer in input_layers}
+        inputs['energy'] = Input(shape=(1), name='energy')
+        inputs['eta']    = Input(shape=(1), name='eta'   )
         
-#         # We can immediately remove the channel dimension of the inputs, it is given by the data pipeline
-#         # but irrelevant for this particular architecture.
-#         for key in inputs.keys():
-#             inputs[key] = inputs[key].squeeze()
+        # These are a bunch of tensors. For now we will just combine everything. Could consider having
+        # different network branches for different layers.
+        lorentz_outputs = [LorentzBlock()(inputs[layer]) for layer in input_layers]
+        X = Concatenate(axis=1)(lorentz_outputs + [inputs['energy'],inputs['eta']])
+        units = X.shape[1]
         
-#         input_list = list(inputs.values())
-#         layers = ['EMB1','EMB2','EMB3','TileBar0','TileBar1','TileBar2']
+        for i in range(depth):
+            X = Dense(units=units, activation='relu',name='Dense{}'.format(i+1))(X)
         
-#         X_list = []
-        
-#         for i,layer in enumerate(layers):
-            
-#             # Prepare the input. Vectors will be of the form (et, eta, phi, m=0).
-#             layer_shape = inputs[layer].shape[:3] # includes batch_size
-#             layer_shape_nb = layer_shape[1:] # no batch_size
-#             midpoint = tuple(layer_shape_nb/2) # gives the top-right pixel w.r.t. image center
-            
-#             d_eta = tf.zeros(tuple(layer_shape))
-            
-            
-            
-            
-#             X = LorentBlock()
-#         return model 
+        X = Dense(units=1, activation='linear', name='output', kernel_initializer='normal')(X)
 
-    
+        # Create model object.
+        input_list = list(inputs.values())
+        model = Model(inputs=input_list, outputs=X, name='LorentzNet')
+        
+        # Compile the model
+        optimizer = Adam(learning_rate=lr,decay=0.)
+        model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
+        return model
