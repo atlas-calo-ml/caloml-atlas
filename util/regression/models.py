@@ -355,10 +355,11 @@ class resnet():
         return model
     
 class lorentz_net():    
-    def __init__(self,lr=5e-5, n_vecs=10, depth=5):
+    def __init__(self,lr=5e-5, n_vecs=10, depth=5, dropout=0.):
         self.lr = lr
         self.depth = depth
         self.n_vecs = n_vecs
+        self.dropout = dropout
         self.custom_objects = {'LorentzBlock':LorentzBlock}
     
     # create model
@@ -366,7 +367,8 @@ class lorentz_net():
         lr = self.lr
         depth = self.depth
         n_vecs = self.n_vecs
-        
+        dropout = self.dropout
+
         # Gather inputs -- the images, the reco energy and eta.
         input_layers = list(cell_meta.keys())
         input_shape = (n_vecs,4)
@@ -382,6 +384,7 @@ class lorentz_net():
         
         for i in range(depth):
             X = Dense(units=units, activation='relu',name='Dense{}'.format(i+1))(X)
+            if(dropout > 0.): X = Dropout(dropout)(X)
         
         X = Dense(units=1, activation='linear', name='output', kernel_initializer='normal')(X)
 
