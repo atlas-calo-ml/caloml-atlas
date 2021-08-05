@@ -355,11 +355,13 @@ class resnet():
         return model
     
 class lorentz_net():    
-    def __init__(self,lr=5e-5, n_vecs=10, depth=5, dropout=0.):
+    def __init__(self,lr=5e-5, n_vecs=(10, 10, 8, 4, 4, 2), depth=5, units=-1, dropout=0., regularization=0.):
         self.lr = lr
         self.depth = depth
+        self.units = units
         self.n_vecs = n_vecs
         self.dropout = dropout
+        self.regularization = regularization
         self.custom_objects = {'LorentzBlock':LorentzBlock}
     
     # create model
@@ -368,22 +370,28 @@ class lorentz_net():
         depth = self.depth
         n_vecs = self.n_vecs
         dropout = self.dropout
+        reg = self.regularization
+        units = self.units
 
-        # Gather inputs -- the images, the reco energy and eta.
+        # Gather inputs -- the images, the reco energy and eta.        
         input_layers = list(cell_meta.keys())
-        input_shape = (n_vecs,4)
-        inputs = {layer:Input(shape=input_shape,name=layer) for layer in input_layers}
+        input_shapes = [(nv, 4) for nv in n_vecs]
+        #input_shape = (n_vecs,4)
+        inputs = {layer:Input(shape=input_shapes[i],name=layer) for i,layer in enumerate(input_layers)}
         inputs['energy'] = Input(shape=(1), name='energy')
         inputs['eta']    = Input(shape=(1), name='eta'   )
         
         # These are a bunch of tensors. For now we will just combine everything. Could consider having
         # different network branches for different layers.
-        lorentz_outputs = [LorentzBlock()(inputs[layer]) for layer in input_layers]
+        lorentz_outputs = [LorentzBlock(calc_diagonal=False)(inputs[layer]) for layer in input_layers]
         X = Concatenate(axis=1)(lorentz_outputs + [inputs['energy'],inputs['eta']])
-        units = X.shape[1]
+        if(units == -1): units = X.shape[1]
         
         for i in range(depth):
-            X = Dense(units=units, activation='relu',name='Dense{}'.format(i+1))(X)
+            
+            kwargs = {}
+            if(reg > 0.): kwargs['kernel_regularizer'] = tf.keras.regularizers.l2(reg)
+            X = Dense(units=units, activation='relu',name='Dense{}'.format(i+1), **kwargs)(X)
             if(dropout > 0.): X = Dropout(dropout)(X)
         
         X = Dense(units=1, activation='linear', name='output', kernel_initializer='normal')(X)

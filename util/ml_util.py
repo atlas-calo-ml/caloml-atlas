@@ -77,13 +77,53 @@ def reshapeSeparateCNN(cells):
 
     return reshaped
 
+def ApplyCuts(arrays, cut_distributions, cut_values, cut_types, verbose):
+    keys = arrays.keys()
+    indices = {}
+    for key in keys: indices[key] = np.arange(0,len(arrays[key]))
+            
+    # Filter out clusters that do not pass some cut.
+    if(cut_distributions != []):
+        selected_indices = {key: np.full(len(arrays[key]),True,dtype=bool) for key in keys}
+
+    # TODO: Add support for more complex cuts. Currently support cutting on branch, or multiplication/division of two branches.
+    for i, cut_distrib in enumerate(cut_distributions):
+        if(verbose): print('Applying cut on distribution: {}.'.format(cut_distrib))
+        cut_value = cut_values[i]
+        cut_type = cut_types[i]
+        
+        for key in keys:
+            if('/' in cut_distrib):
+                cut_distribs = cut_distrib.split('/')
+                denominator = arrays[key][cut_distribs[1]].to_numpy()
+                
+                denominator[denominator == 0.] = 1.
+                val_array = arrays[key][cut_distribs[0]].to_numpy() / denominator
+
+            elif('*' in cut_distrib):
+                cut_distribs = cut_distrib.split('*')
+                val_array = arrays[key][cut_distribs[0]].to_numpy() * arrays[key][cut_distribs[1]].to_numpy()
+
+            else: val_array = arrays[key][cut_distrib].to_numpy()
+
+            if cut_type == 'lower': sel = (val_array > cut_value)
+            elif cut_type == 'upper': sel = (val_array < cut_value)
+            elif cut_type == 'window': sel = (val_array > cut_value[0]) * (val_array < cut_value[1])
+            else:
+                print('Warning: Cut type {} not understood.'.format(cut_type))
+                continue 
+            #selected_indices[key] *= sel.to_numpy()
+            selected_indices[key] *= sel
+
+    indices = {key:val[selected_indices[key]] for key,val in indices.items()}
+    return indices
+
 def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTree', 
                   balance_data=True, n_max=-1, 
                   cut_distributions=[], cut_values=[], cut_types=[],
                   match_distribution='', match_binning=(), match_log=False,
                   verbose=False, load=False, save=False, filename='', return_indices=False):
 
-    indices = {}
     pdata = {}
     pcells = {}
     keys = list(root_file_dict.keys())
@@ -111,8 +151,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         
         if(return_indices): # TODO: Rework this a little!
             hf = h5.File(selec_filename,'r')
-            for key in keys:
-                indices[key] = hf[key][:]
+            indices = {key: hf[key][:] for key in keys}
             hf.close()
             
     else:
@@ -125,28 +164,30 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
             else:
                 arrays[key] = ur.lazy(':'.join((root_files, cluster_tree)), filter_branch=lambda x: x.name in branches)
 
-        # Create indices for selected clusters.
-        # "indices[key]" will hold a list of indices themselves (*not* booleans). E.g. [0, 1, 4, 9]
-        # Thus its length will decrease as we remove events from our selection.
-        for key in keys: indices[key] = np.arange(0,len(arrays[key]))
+#         # Create indices for selected clusters.
+#         # "indices[key]" will hold a list of indices themselves (*not* booleans). E.g. [0, 1, 4, 9]
+#         # Thus its length will decrease as we remove events from our selection.
+#         for key in keys: indices[key] = np.arange(0,len(arrays[key]))
             
-        # Filter out clusters that do not pass some cut.
-        if(cut_distributions != []):
-            selected_indices = {key: np.full(len(arrays[key]),True,dtype=bool) for key in keys}
+#         # Filter out clusters that do not pass some cut.
+#         if(cut_distributions != []):
+#             selected_indices = {key: np.full(len(arrays[key]),True,dtype=bool) for key in keys}
             
-            for i, cut_distrib in enumerate(cut_distributions):
-                if(verbose): print('Applying cut on distribution: {}.'.format(cut_distrib))
-                cut_value = cut_values[i]
-                cut_type = cut_types[i]
-                for key in keys:
-                    if cut_type == 'lower': sel = (arrays[key][cut_distrib] > cut_value)
-                    elif cut_type == 'upper': sel = (arrays[key][cut_distrib] < cut_value)
-                    elif cut_type == 'window': sel = (arrays[key][cut_distrib] > cut_value[0]) * (arrays[key][cut_distrib] < cut_value[1])
-                    else:
-                        print('Warning: Cut type {} not understood.'.format(cut_type))
-                        continue 
-                    selected_indices[key] *= sel.to_numpy()
-            indices = {key:val[selected_indices[key]] for key,val in indices.items()}
+#             # TODO: Add support for more complex cuts, e.g. cutting on some var_1 / var_2.
+#             for i, cut_distrib in enumerate(cut_distributions):
+#                 if(verbose): print('Applying cut on distribution: {}.'.format(cut_distrib))
+#                 cut_value = cut_values[i]
+#                 cut_type = cut_types[i]
+#                 for key in keys:
+#                     if cut_type == 'lower': sel = (arrays[key][cut_distrib] > cut_value)
+#                     elif cut_type == 'upper': sel = (arrays[key][cut_distrib] < cut_value)
+#                     elif cut_type == 'window': sel = (arrays[key][cut_distrib] > cut_value[0]) * (arrays[key][cut_distrib] < cut_value[1])
+#                     else:
+#                         print('Warning: Cut type {} not understood.'.format(cut_type))
+#                         continue 
+#                     selected_indices[key] *= sel.to_numpy()
+#             indices = {key:val[selected_indices[key]] for key,val in indices.items()}
+        indices = ApplyCuts(arrays, cut_distributions, cut_values, cut_types, verbose)
                                 
         # Filter out clusters so that our data series match in their distribution of a user-supplied variable.
         if(match_distribution != ''):

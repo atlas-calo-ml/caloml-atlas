@@ -302,18 +302,22 @@ class LorentzLayer(Layer):
 # trainable weights, but can be used with vector inputs to generate
 # Lorentz invariants on-the-fly (which can be passed into a standard DNN).
 class LorentzBlock(Layer):
-    def __init__(self, name_prefix='lorentz_block_', **kwargs):
+    def __init__(self, name_prefix='lorentz_block_', calc_diagonal=True, **kwargs):
         super(LorentzBlock, self).__init__(**kwargs)
         self.name_prefix = name_prefix
         self.lorentz = LorentzLayer(name_prefix = self.name_prefix + 'llayer_')
+        self.calc_diagonal = calc_diagonal
           
     def call(self, x):
         # x is a set of 4-vectors.
         # Note that the first dimension will be batch size in practice,
         # and the second dimension is the number of vectors.
         n = x.shape[1]
-        #m =  (n * (n+1)) / 2 # unused
-        tensors = [self.lorentz(x[:,i,:],x[:,j,:]) for i in range(n) for j in range(i+1)]
+        if(self.calc_diagonal):
+            tensors = [self.lorentz(x[:,i,:],x[:,j,:]) for i in range(n) for j in range(i+1)]
+        else:
+            tensors = [self.lorentz(x[:,i,:],x[:,j,:]) for i in range(n) for j in range(i)]
+            
         x = tf.stack(tensors, axis=-1)
         return x      
     
@@ -321,7 +325,8 @@ class LorentzBlock(Layer):
         config = super(LorentzBlock, self).get_config()
         config.update(
             {
-                'name_prefix':self.name_prefix
+                'name_prefix':self.name_prefix,
+                'calc_diagonal':self.calc_diagonal
             }
         )
         return config   
