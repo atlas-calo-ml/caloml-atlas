@@ -120,7 +120,8 @@ class PlotStyle:
         ax.set_facecolor(self.canv_plt)
     
         # tick colors (marks, then tick labels)
-        ax.tick_params(axis='both',colors=self.main_plt)
+        ax.tick_params(axis='both',colors=self.main_plt, which='major')
+        ax.tick_params(axis='both',colors=self.text_plt, which='minor')
         plt.setp(ax.get_xticklabels(), color=self.text_plt)
         plt.setp(ax.get_yticklabels(), color=self.text_plt)
     

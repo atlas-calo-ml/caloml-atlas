@@ -17,7 +17,7 @@ def MatchJets(match_string, match_settings, input_files, output_file, executable
     for i in range(n_files):
         command = 'root -q -l -b -x \'{}JetMatching.C+("{}", "{}", "{}", "{}")\''.format(executable_suffix, input_files[i], output_files[i], match_string, setting_string)
         sub.check_call(command,shell=True, stdout=sub.DEVNULL, stderr=sub.DEVNULL) # TODO: Try to switch to shell=False version
-        
+
     if(n_files > 1):  
         # Combine our output files, and delete the temporary files.
         command = ['hadd', output_file] + output_files

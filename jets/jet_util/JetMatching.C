@@ -32,6 +32,7 @@
 #include <iostream> // std::cout (for debugging)
 #include <numeric> // std::iota
 #include <string>
+#include <stdio.h> // printf
 #include <stdlib.h>
 
 // Global variables
@@ -296,7 +297,16 @@ void matchNtuple(TString trigger_jet_file = "../../data/tl0gp/myfile_tree.root",
                 Int_t matching_idx_loc = getMatch(reco_idx, truth_indices, r_reco, r_truth, truth_dr2);
                 if(matching_idx_loc < 0){
                     // Failed to find matching truth jet.
-//                     std::cout << "\t\t\tNo match." << std::endl; //dbg
+                    //std::cout << "\t\t\tNo match. p_reco = ()" << std::endl; //dbg
+                    
+//                     printf("\t\t\tNo match. p_reco = (%4.2f,%4.2f,%4.2f,%4.2f)\n", 
+//                            r_reco[coord_names.at(0)]->At(reco_idx),
+//                            r_reco[coord_names.at(1)]->At(reco_idx),
+//                            r_reco[coord_names.at(2)]->At(reco_idx),
+//                            r_reco[coord_names.at(3)]->At(reco_idx)
+//                           );
+                    
+                    
                     continue;
                 }
                 
@@ -308,6 +318,21 @@ void matchNtuple(TString trigger_jet_file = "../../data/tl0gp/myfile_tree.root",
 //                     std::cout << "\t\t\tFailed truth isolation requirement." << std::endl; //dbg
                     continue;
                 }
+                
+//                 printf("\t\t\tMatch: %i -> %i \t (%4.2f,%4.2f,%4.2f,%4.2f) -> (%4.2f,%4.2f,%4.2f,%4.2f)\n",
+//                        reco_idx, matching_idx,
+//                        r_reco[coord_names.at(0)]->At(reco_idx),
+//                        r_reco[coord_names.at(1)]->At(reco_idx),
+//                        r_reco[coord_names.at(2)]->At(reco_idx),
+//                        r_reco[coord_names.at(3)]->At(reco_idx),
+//                        r_truth[coord_names.at(0)]->At(matching_idx),
+//                        r_truth[coord_names.at(1)]->At(matching_idx),
+//                        r_truth[coord_names.at(2)]->At(matching_idx),
+//                        r_truth[coord_names.at(3)]->At(matching_idx)
+//                       );
+                
+                //std::cout << "\t\t\tMatch: " << reco_idx << " -> " << matching_idx <<  " ." << std::endl; //dbg
+
                 
                 // We have found a matching truth jet & passed any isolation requirements.
                 // Now we want to record the pair of jets' kinematics, to write to the output ntuple,
