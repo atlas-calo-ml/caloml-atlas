@@ -5,6 +5,18 @@ import matplotlib.pyplot as plt
 import ROOT as rt
 import sys, os, uuid
 
+# For writing values with errors
+def str_with_err(value,error,digits=2):
+    power = int(np.floor(np.log10(value)))
+    val = value * 10**(-power)
+    val_str = ('{:.' +str(int(digits)) + 'f}').format(val)
+    err = error * 10**(-power)
+    error_str =  ('{:.' +str(int(digits)) + 'f}').format(err)
+    power_str = str(np.abs(power)).zfill(2)
+    if(np.sign(power) < 0): power_str = '-' + power_str
+    result = '(' + val_str + ' #pm ' + error_str + ')e' + power_str
+    return result
+
 # Print iterations progress.
 # Adapted from https://stackoverflow.com/a/34325723.
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
