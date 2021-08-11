@@ -4,11 +4,11 @@ import tensorflow as tf
 from tensorflow import keras
 import numpy as np
 
-def LearningRateSchedule(mode='exp', gamma=0.1):
+def LearningRateSchedule(mode='exp', gamma=0.1, offset=0):
 
     if(mode == 'exp'):
         def scheduler(epoch,lr):
-            if(epoch == 0): return lr
+            if(epoch <= offset): return lr
             else: return lr * tf.math.exp(-gamma)    
     else:
         def scheduler(epoch,lr):

@@ -1,28 +1,29 @@
 # Based on code from keras_contrib, at https://github.com/keras-team/keras-contrib/blob/master/keras_contrib/callbacks/cyclical_lr.py
-
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
 # Reference: 
 class CyclicLearningRate(keras.callbacks.Callback):
-    def __init__(self, base_lr=1.0e-3, max_lr=5.0e-3, step_size=2.0e3, mode='triangular',gamma=1., scale_fn=None, scale_mode='cycle'):
+    def __init__(self, base_lr=1.0e-3, max_lr=5.0e-3, step_size=2.0e3, mode='triangular',gamma=1., scale_fn=None, scale_mode='iterations', **kwargs):
         self.base_lr = base_lr
         self.max_lr = max_lr
         self.step_size = step_size
-        self.mode = 'triangular'
-        self.gamma = 1.
+        self.scale_mode = scale_mode
+        self.mode = mode
+        self.gamma = gamma
         self.history = {}
         
         if scale_fn is None:
             if(self.mode == 'triangular'):
                 self.scale_fn = lambda x: 1.
-                self.scale_mode = 'cycle'
-            elif(self.mode == 'traingular2'):
+                if(self.scale_mode is None): self.scale_mode = 'cycle'
+            elif(self.mode == 'triangular2'):
                 self.scale_fn = lambda x: 1. / (2.**(x-1))
-                self.scale_mode = 'cycle'
+                if(self.scale_mode is None): self.scale_mode = 'cycle'
             elif(self.mode == 'exp_range'):
                 self.scale_fn = lambda x: gamma ** x
-                self.scale_mode = 'iterations'     
+                if(self.scale_mode is None): self.scale_mode = 'iterations'
         else:
             self.scale_fn = scale_fn
             self.scale_mode = scale_mode

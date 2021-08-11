@@ -19,10 +19,11 @@ from util.ml_util import cell_meta
 # plus the reco energy (possibly transformed by a logarithm),
 # and the eta of the cluster. (This is our baseline model).
 class baseline_nn_model(): 
-    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1):
+    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1, opt='adam'):
         self.dropout = dropout
         self.decay = decay
         self.lr = lr
+        self.opt = optimizer
         self.custom_objects = {}
     
     # create model
@@ -41,21 +42,23 @@ class baseline_nn_model():
         model.add(Dense(int(used_pixels/2), activation='relu'))
         if(dropout > 0.): model.add(Dropout(dropout))
         model.add(Dense(units=1, kernel_initializer='normal', activation='linear'))
-        opt = Adam(learning_rate=lr, decay=decay)
-        model.compile(optimizer=opt, loss='mse',metrics=['mae','mse'])
+        if(self.opt == 'adam'): optimizer = Adam(learning_rate=lr, decay=decay)
+        else: optimizer = SGD(learning_rate=lr,momentum=0.)
+        model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model 
 
 # A simple, fully-connected network architecture.
 # Inputs correspond to the reco energy, eta, as well as a vector
 # encoding the percentage of energy deposited in each calorimeter layer.
 class depth_network():
-    def __init__(self, units=8, depth=3, lr=5e-5, decay=1e-6, dropout=-1):
+    def __init__(self, units=8, depth=3, lr=5e-5, decay=1e-6, dropout=-1, opt='adam'):
         #self.strategy = strategy
         self.units = units
         self.depth = depth
         self.dropout = dropout
         self.decay = decay
         self.lr = lr
+        self.opt = opt
         self.custom_objects = {}
         
     # create model
@@ -76,17 +79,19 @@ class depth_network():
         for i in range(depth): X = Dense(units=units, activation='relu',name='Dense_{}'.format(i+1))(X)
         X = Dense(units=1, kernel_initializer='normal', activation='linear')(X)
 
-        optimizer = Adam(learning_rate=lr, decay=decay)
+        if(self.opt == 'adam'): optimizer = Adam(learning_rate=lr, decay=decay)
+        else: optimizer = SGD(learning_rate=lr,momentum=0.)
         model = Model(inputs=input_list, outputs=X, name='Simple')
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model    
 
 # Simple CNN + Dense.
 class simple_cnn():
-    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1, augmentation=True):
+    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1, augmentation=True, opt='adam'):
         self.dropout = dropout
         self.decay = decay
         self.lr = lr
+        self.opt = opt
         self.augmentation = augmentation
         self.custom_objects = {
             'ImageScaleBlock':ImageScaleBlock
@@ -152,7 +157,8 @@ class simple_cnn():
         x = Dropout(dropout, name='full_dropout_4')(x)
         output = Dense(1, kernel_initializer='normal', activation='linear')(x)
         
-        optimizer = Adam(learning_rate=lr, decay=decay)
+        if(self.opt == 'adam'): optimizer = Adam(learning_rate=lr, decay=decay)
+        else: optimizer = SGD(learning_rate=lr,momentum=0.)
         model = Model(inputs=input_list, outputs=output, name='Simple_CNN')
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model
@@ -160,10 +166,11 @@ class simple_cnn():
 # Based on our split_EMB classification model (which is based on Max's code),
 # with a few changes made for regression.
 class split_emb_cnn():
-    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1, augmentation=True):
+    def __init__(self, lr=5e-5, decay=1e-6, dropout=-1, augmentation=True, opt='adam'):
         self.dropout = dropout
         self.decay = decay
         self.lr = lr
+        self.opt = opt
         self.augmentation = augmentation
         self.custom_objects = {
             'ImageScaleBlock':ImageScaleBlock
@@ -252,17 +259,18 @@ class split_emb_cnn():
         
         # final output
         output = Dense(units=1, kernel_initializer='normal', activation='linear')(x)
-
-        optimizer = Adam(learning_rate=lr, decay=decay)
+        if(self.opt == 'adam'): optimizer = Adam(learning_rate=lr, decay=decay)
+        else: optimizer = SGD(learning_rate=lr,momentum=0.)
         model = Model(inputs=input_list, outputs=output, name='Split_EMB_CNN')
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model
 
 class resnet():
-    def __init__(self, lr, decay, filter_sets, f_vals, s_vals, i_vals, channels=6, input_shape=(128,16), augmentation=True, normalization=True):
+    def __init__(self, lr, decay, filter_sets, f_vals, s_vals, i_vals, channels=6, input_shape=(128,16), augmentation=True, normalization=True, opt='adam'):
 
         self.decay = decay
         self.lr = lr
+        self.opt = opt
         self.custom_objects = {
             'ImageScaleBlock':ImageScaleBlock,
             'ConvolutionBlock':ConvolutionBlock,
@@ -350,13 +358,15 @@ class resnet():
         model = Model(inputs=input_list, outputs=X, name='ResNet')
 
         # Compile the model
-        optimizer = Adam(learning_rate=lr,decay=decay)
+        if(self.opt == 'adam'): optimizer = Adam(learning_rate=lr, decay=decay)
+        else: optimizer = SGD(learning_rate=lr,momentum=0.)
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model
     
 class lorentz_net():    
-    def __init__(self,lr=5e-5, n_vecs=(10, 10, 8, 4, 4, 2), depth=5, units=-1, dropout=0., regularization=0.):
+    def __init__(self,lr=5e-5, n_vecs=(10, 10, 8, 4, 4, 2), depth=5, units=-1, dropout=0., regularization=0., opt='adam'):
         self.lr = lr
+        self.opt = opt
         self.depth = depth
         self.units = units
         self.n_vecs = n_vecs
@@ -401,6 +411,7 @@ class lorentz_net():
         model = Model(inputs=input_list, outputs=X, name='LorentzNet')
         
         # Compile the model
-        optimizer = Adam(learning_rate=lr,decay=0.)
+        if(self.opt == 'adam'): optimizer = Adam(learning_rate=lr, decay=0.)
+        else: optimizer = SGD(learning_rate=lr,momentum=0.)
         model.compile(optimizer=optimizer, loss='mse',metrics=['mae','mse'])
         return model

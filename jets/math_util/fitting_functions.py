@@ -99,9 +99,9 @@ class AsymmGaussianLike:
         
     def eval(self,x,p):
         if(x[0] <= p[1]):
-            return p[0] * np.exp(-0.5 * np.power((x[0]-p[1])/p[2], p[4]))
+            return p[0] * np.exp(-1. * np.power( np.abs((x[0]-p[1])/p[2]), p[4])) # note the factor of -1 instead of -1/2 in exponent, this is a bit of an arbitrary choice
         else:
-            return p[0] * np.exp(-0.5 * np.power((x[0]-p[1])/p[3], p[5]))
+            return p[0] * np.exp(-1. * np.power(( np.abs(x[0]-p[1])/p[3]), p[5]))
         
     def peak(self,p,dp):
         value = p[1]
@@ -110,9 +110,11 @@ class AsymmGaussianLike:
     
     # Gives FWHM
     def width(self,p,dp):
-        factor = 2. * np.sqrt(2. * np.log(2.))
-        value = factor * (p[2] + p[3])/2.
-        uncertainty = factor * np.sqrt(np.square(dp[2] / 2.) + np.square(dp[3] / 2.))
+        ep = np.log(2.)
+        value =  2. * np.power(ep, 1./p[4]) * p[2]
+        value += 2. * np.power(ep, 1./p[5]) * p[3]
+        uncertainty =  np.power(ep, 2./p[4]) * (np.square(dp[2]) + np.square(np.log(ep) / np.square(p[4])) * np.square(dp[4]))
+        uncertainty += np.power(ep, 2./p[5]) * (np.square(dp[3]) + np.square(np.log(ep) / np.square(p[5])) * np.square(dp[5]))
         return (value,uncertainty)
     
     # Convenience function
@@ -177,6 +179,8 @@ class ExGaussian:
         tf1.SetParameter(3,3.)
         tf1.SetParLimits(3,2.,5.) # in practice this limit might be helpful
         return    
+    
+
     
 # def LogLogistic(x,p):
 #     '''
