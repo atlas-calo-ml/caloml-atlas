@@ -23,7 +23,7 @@ class baseline_nn_model():
         self.dropout = dropout
         self.decay = decay
         self.lr = lr
-        self.opt = optimizer
+        self.opt = opt
         self.custom_objects = {}
     
     # create model

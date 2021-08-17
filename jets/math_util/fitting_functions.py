@@ -90,19 +90,19 @@ class AsymmGaussian:
 
 class AsymmGaussianLike:
     '''
-    Like the asymmetric Gaussian, but now the exponents are also fitting parameters.
-    This allows not only for different widths but for different curvatures.
+    Asymmetric Gaussian function -- the standard deviation can be different
+    to the left and right of the mean (2 fitting parameters instead of 1).
     '''
     def __init__(self):
         self.npar = 6
-        self.name = 'AsymmGaussianLike'
+        self.name = 'AsymmGenGaussian'
         
     def eval(self,x,p):
         if(x[0] <= p[1]):
-            return p[0] * np.exp(-1. * np.power( np.abs((x[0]-p[1])/p[2]), p[4])) # note the factor of -1 instead of -1/2 in exponent, this is a bit of an arbitrary choice
+            return p[0] * np.exp(-0.5 * np.power( np.abs((x[0]-p[1])/p[2]) , p[4]))
         else:
-            return p[0] * np.exp(-1. * np.power(( np.abs(x[0]-p[1])/p[3]), p[5]))
-        
+            return p[0] * np.exp(-0.5 * np.power( np.abs((x[0]-p[1])/p[3]) , p[5]))
+
     def peak(self,p,dp):
         value = p[1]
         uncertainty = dp[1]
@@ -123,7 +123,60 @@ class AsymmGaussianLike:
         tf1.SetParameter(1,h.GetMean())
         tf1.SetParameter(2,h.GetRMS())
         tf1.SetParameter(3,h.GetRMS())
+        tf1.SetParameter(4,2.1)
+        tf1.SetParameter(5,1.9)
+        #tf1.SetParLimits(4,0.5,5.)
+        tf1.FixParameter(4,2.)
+        tf1.SetParLimits(5,0.5,5.)
         return
+    
+    
+    
+# class AsymmGaussianLike:
+#     '''
+#     Like the asymmetric Gaussian, but now the exponents are also fitting parameters.
+#     This allows not only for different widths but for different curvatures.
+#     '''
+#     def __init__(self):
+#         self.npar = 4
+#         self.name = 'AsymmGaussianLike'
+        
+#     def eval(self,x,p):
+#         if(x[0] <= p[1]):
+#             return p[0] * np.exp(-0.5 * np.power((x[0]-p[1])/p[2]) , 2.)
+#             #return p[0] * np.exp(-1. * np.power( np.abs((x[0]-p[1])/p[2]), p[4])) # note the factor of -1 instead of -1/2 in exponent, this is a bit of an arbitrary choice
+#         else:
+#             return p[0] * np.exp(-0.5 * np.power((x[0]-p[1])/p[3]) , 2.)
+#             #return p[0] * np.exp(-1. * np.power(( np.abs(x[0]-p[1])/p[3]), p[5]))
+        
+#     def peak(self,p,dp):
+#         value = p[1]
+#         uncertainty = dp[1]
+#         return (value,uncertainty)
+    
+#     # Gives FWHM
+#     def width(self,p,dp):
+#         ep = np.log(2.)
+# #         value =  2. * np.power(ep, 1./p[4]) * p[2]
+# #         value += 2. * np.power(ep, 1./p[5]) * p[3]
+# #         uncertainty =  np.power(ep, 2./p[4]) * (np.square(dp[2]) + np.square(np.log(ep) / np.square(p[4])) * np.square(dp[4]))
+# #         uncertainty += np.power(ep, 2./p[5]) * (np.square(dp[3]) + np.square(np.log(ep) / np.square(p[5])) * np.square(dp[5]))
+#         value = 0.
+#         uncertainty = 0.
+#         return (value,uncertainty)
+    
+#     # Convenience function
+#     def set_parameters(self,tf1,h):
+#         tf1.SetParameter(0,h.GetMaximum())
+#         tf1.SetParameter(1,h.GetMean())
+#         tf1.SetParameter(2,h.GetRMS())
+#         tf1.SetParameter(3,h.GetRMS())
+# #         tf1.SetParameter(4,2.)
+# #         tf1.SetParameter(5,2.)
+# #         tf1.SetParLimits(4,1.9,2.1)
+# #         tf1.SetParLimits(5,1.9,2.1)
+
+#         return
 
 class ExGaussian:
     def __init__(self):
