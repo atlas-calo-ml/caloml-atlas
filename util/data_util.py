@@ -8,8 +8,6 @@ import tensorflow as tf
 import numpy as np
 import ROOT as rt
 import uproot as ur
-path_prefix = os.getcwd() + '/../../' # todo: adjust this accordingly
-if(path_prefix not in sys.path): sys.path.append(path_prefix)
 from util import ml_util as mu
 
 class ROOTImageArray():
