@@ -3,10 +3,13 @@
 # e.g. see https://rubikscode.net/2019/12/09/creating-custom-tensorflow-dataset/ .
 
 import sys, os, glob
+
 import tensorflow as tf
 import numpy as np
 import ROOT as rt
 import uproot as ur
+path_prefix = os.getcwd() + '/../../' # todo: adjust this accordingly
+if(path_prefix not in sys.path): sys.path.append(path_prefix)
 from util import ml_util as mu
 
 class ROOTImageArray():
@@ -58,9 +61,10 @@ class ROOTImageArray():
                     images[br] = np.concatenate((images[br],buff[br][None,...]),axis=0)
         return images
     
-    def get_types(self):
+    def get_types(self, return_dict=False):
+        if(return_dict): return {key:val.dtype for key,val in self.read_buffer.items()}
         return [x.dtype for x in self.read_buffer.values()]
-
+        
 class MLTreeV1DataGen(tf.keras.utils.Sequence):
     def __init__(self,
                  root_files,
@@ -97,6 +101,9 @@ class MLTreeV1DataGen(tf.keras.utils.Sequence):
                             step_size = self.step_size
                            )
         
+        # Now remove the target from scalar_branches, so that it is not included among features.
+        self.scalar_branches = [x for x in self.scalar_branches if x != self.target]
+        
         self.image_array = ROOTImageArray(root_files = self.root_files,
                                           tree_name = self.tree_name,
                                           image_branches = self.matrix_branches
@@ -122,7 +129,8 @@ class MLTreeV1DataGen(tf.keras.utils.Sequence):
 
         # Generate data. X is a list of features, y is a single feature (target).
         X, y = self.__get_data(batch)
-        return list(X + [y])
+        return X, y
+        #return list(X + [y])
     
     def on_epoch_end(self):
         self.index = np.arange(len(self.indices))
@@ -134,9 +142,6 @@ class MLTreeV1DataGen(tf.keras.utils.Sequence):
             for br in self.scalar_branches
             }
         X = {**X, **self.image_array[batch]} # needs Python 3.5+
-        
-        X = [self.scalar_array[br][batch].to_numpy() for br in self.scalar_branches]
-        X += [self.image_array[batch][x] for x in self.matrix_branches]
         
         if(self.target is not None):
             y = self.scalar_array[self.target][batch].to_numpy()
@@ -150,9 +155,9 @@ class MLTreeV1DataGen(tf.keras.utils.Sequence):
         return self.target
     
     def get_feature_types(self, return_tf=True):
-        types = [self.scalar_array[br][[0]].to_numpy().dtype for br in self.scalar_branches]
-        types += self.image_array.get_types()
-        if(return_tf): types = [tf.dtypes.as_dtype(x) for x in types]
+        types = {br: self.scalar_array[br][[0]].to_numpy().dtype for br in self.scalar_branches}
+        types = {**types, **self.image_array.get_types(return_dict=True)}
+        if(return_tf): types = {key:tf.dtypes.as_dtype(val) for key,val in types.items()}
         return types
     
     def get_target_type(self, return_tf=True):
@@ -161,8 +166,11 @@ class MLTreeV1DataGen(tf.keras.utils.Sequence):
         return types
     
     def get_feature_shapes(self):
-        shapes = [(self.batch_size,) for _ in self.scalar_branches]
-        shapes += [tuple([self.batch_size, *x]) for x in self.image_array.image_shapes]
+        shapes = {br:(self.batch_size,) for br in self.scalar_branches}
+        matrix_shapes = {self.matrix_branches[i] : tuple([self.batch_size,*self.image_array.image_shapes[i]]) 
+                         for i in range(len(self.matrix_branches))
+                        }
+        shapes = {**shapes, **matrix_shapes}
         return shapes
     
     def get_target_shape(self):
@@ -173,11 +181,42 @@ class MLTreeV1DataGen(tf.keras.utils.Sequence):
         return tuple(self.get_feature_names() + [self.get_target_name()])
     
     def get_types(self):
-        return tuple(self.get_feature_types() + [self.get_target_type()])
+        return self.get_feature_types(),self.get_target_type()
     
     def get_shapes(self):
-        return tuple(self.get_feature_shapes() + [self.get_target_shape()])    
+        return self.get_feature_shapes(),self.get_target_shape()
+    
+    def get_feature_signatures(self):
+        shapes = self.get_feature_shapes()
+        types = self.get_feature_types()
+        sig = {key: tf.TensorSpec(shape=val, dtype=types[key], name=key) for key,val in shapes.items()}
+        return sig
+    
+    def get_target_signature(self):
+        shapes = self.get_target_shape()
+        types = self.get_target_type()
+        names = self.get_target_name()
+        sig = tf.TensorSpec(shape=shapes, dtype=types, name=names)
+        return sig
+    
+    def get_signatures(self):
+        return self.get_feature_signatures(),self.get_target_signature()
     
     def __call__(self):
         for idx in self.index:
             yield self.__getitem__(idx)
+            
+    
+    # TODO: Work in progress: Make dataset functions/classes that use the above generator
+def MLTreeV1Dataset(root_files,tree_name,scalar_branches,matrix_branches = list(mu.cell_meta.keys()),
+                    target=None,batch_size=200,shuffle=True,step_size=None):
+        
+    generator = MLTreeV1DataGen(root_files,tree_name,scalar_branches,matrix_branches,target,batch_size,shuffle,step_size)
+
+    dataset = tf.data.Dataset.from_generator(
+        generator = generator,
+        output_signature = generator.get_signatures()
+    )
+    
+    # Note: This dataset is throwing awkward/numpy errors when used, not yet clear what's going wrong. Playing with the generator seems OK.
+    return dataset
