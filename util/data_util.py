@@ -207,14 +207,19 @@ class MLTreeV1DataGen(tf.keras.utils.Sequence):
     
     # TODO: Work in progress: Make dataset functions/classes that use the above generator
 def MLTreeV1Dataset(root_files,tree_name,scalar_branches,matrix_branches = list(mu.cell_meta.keys()),
-                    target=None,batch_size=200,shuffle=True,step_size=None):
+                    target=None,batch_size=200,shuffle=True,step_size=None,prefetch=True):
         
     generator = MLTreeV1DataGen(root_files,tree_name,scalar_branches,matrix_branches,target,batch_size,shuffle,step_size)
 
     dataset = tf.data.Dataset.from_generator(
-        generator = generator,
+        generator = lambda: generator, # TODO: why does "lambda: generator" work, but just "generator" doesn't?
         output_signature = generator.get_signatures()
     )
     
-    # Note: This dataset is throwing awkward/numpy errors when used, not yet clear what's going wrong. Playing with the generator seems OK.
+    if(prefetch): dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE) # this might speed things up
+        
+    # Even though TF knows the length of the data when we fit by directly passing the generator, the length of this dataset
+    # will still be unknown (see https://discuss.tensorflow.org/t/typeerror-dataset-length-is-unknown-tensorflow/948/2).
+    # This seems like a bug/oversight, but we can easily fix it.
+    dataset = dataset.apply(tf.data.experimental.assert_cardinality(len(generator)))
     return dataset
