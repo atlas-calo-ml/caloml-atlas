@@ -123,10 +123,13 @@ class AsymmGaussianLike:
         tf1.SetParameter(1,h.GetMean())
         tf1.SetParameter(2,h.GetRMS())
         tf1.SetParameter(3,h.GetRMS())
-        tf1.SetParameter(4,2.1)
+        tf1.SetParameter(4,2.)
         tf1.SetParameter(5,1.9)
-        #tf1.SetParLimits(4,0.5,5.)
+        
         tf1.FixParameter(4,2.)
+        
+        tf1.SetParLimits(2,0., 2.*h.GetRMS())
+        tf1.SetParLimits(3,0., 2.*h.GetRMS())
         tf1.SetParLimits(5,0.5,5.)
         return
     
