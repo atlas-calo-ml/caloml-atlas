@@ -266,7 +266,11 @@ class split_emb_cnn():
         return model
 
 class resnet():
-    def __init__(self, lr, decay, filter_sets, f_vals, s_vals, i_vals, channels=6, input_shape=(128,16), augmentation=True, normalization=True, opt='adam'):
+    def __init__(self, lr, decay, 
+                 filter_sets, f_vals, s_vals, i_vals, 
+                 channels=6, input_shape=(128,16), ndense = 2, dense_units=-1,
+                 augmentation=True, normalization=True, 
+                 opt='adam'):
 
         self.decay = decay
         self.lr = lr
@@ -283,6 +287,8 @@ class resnet():
         self.i_vals = i_vals
         
         self.channels = channels
+        self.ndense = ndense
+        self.dense_units = dense_units
         self.input_shape = input_shape
         self.augmentation = augmentation
         self.normalization = normalization
@@ -294,6 +300,8 @@ class resnet():
         s_vals = self.s_vals
         i_vals = self.i_vals
         channels = self.channels
+        ndense = self.ndense
+        dense_units = self.dense_units
         input_shape = self.input_shape
         augmentation = self.augmentation
         normalization = self.normalization
@@ -331,11 +339,9 @@ class resnet():
             s = s_vals[i]
             ib = i_vals[i]
             stage = i + 1 # 1st stage is Conv2D etc. before ResNet blocks
-            #X = convolutional_block(X, f=f, filters=filters, stage=stage, block='a', s=1)
             X = ConvolutionBlock(f=f, filters=filters, stage=stage, block='a', s=s, normalization=normalization)(X)
             
             for j in range(ib):
-                #X = identity_block(X, f, filters, stage=stage, block=ascii_lowercase[j+1]) # will only cause naming issues if there are many id blocks
                 X = IdentityBlock(f=f, filters=filters, stage=stage, block=ascii_lowercase[j+1],normalization=normalization)(X)
 
         # AVGPOOL
@@ -348,9 +354,11 @@ class resnet():
         X = Flatten()(X)
         tensor_list = [X,energy_input, eta_input]
         X = Concatenate(axis=1)(tensor_list)
-        units = X.shape[1]
-        X = Dense(units=units, activation='relu',name='Dense1')(X)
-        X = Dense(units=units, activation='relu',name='Dense2')(X)
+        
+        if(dense_units <= 0): units = X.shape[1]
+        else: units = dense_units
+        for i in range(ndense):
+            X = Dense(units=units, activation='relu',name='Dense{}'.format(i+1))(X)
         X = Dense(units=1, activation='linear', name='output', kernel_initializer='normal')(X)
 
         # Create model object.

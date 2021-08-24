@@ -74,11 +74,16 @@ def RocCurves(model_scores,
               indices=[],
               sample_weight=None,
               plotpath = '/', plotname = 'ROC', 
-              model_keys = [], 
+              model_keys = [],
+              model_labels = [],
+              colors = [],
               drawPlots=True, figsize=(15,5), 
               plotstyle=qu.PlotStyle('dark')):
     
     if(model_keys == []): model_keys = list(model_scores.keys())
+    if(model_labels == []): model_labels = model_keys
+    if(colors == []): colors = plotstyle.colors
+        
     if(len(indices) != len(data_labels)):  indices = np.full(len(data_labels), True, dtype=np.dtype('bool'))
         
     for model_key in model_keys:
@@ -99,7 +104,11 @@ def RocCurves(model_scores,
     fig, ax = plt.subplots(1,2,figsize=figsize)
     xlist = [roc_fpr[x] for x in model_keys]
     ylist = [roc_tpr[x] for x in model_keys]
-    labels = ['{} (area = {:.3f})'.format(x, roc_auc[x]) for x in model_keys]
+    labels = []
+    for i,x in enumerate(model_keys):
+        labels.append('{} (area = {:.3f})'.format(model_labels[i], roc_auc[x]))
+    
+#     labels = ['{} (area = {:.3f})'.format(x, roc_auc[x]) for x in model_keys]
     title = 'ROC curve: classification of $\pi^+$ vs. $\pi^0$'
 
     pu.roc_plot(ax[0], 
@@ -107,10 +116,11 @@ def RocCurves(model_scores,
                 ylist=ylist,
                 labels=labels,
                 title=title,
-                ps=plotstyle
+                ps=plotstyle,
+                colors=colors
                 )
     
-    title = 'ROC curve (zoomed in at top left)'
+    #title = 'ROC curve (zoomed in at top left)'
     pu.roc_plot(ax[1], 
                 xlist=xlist, 
                 ylist=ylist,
@@ -118,7 +128,8 @@ def RocCurves(model_scores,
                 y_min=0.6, y_max=1.,
                 labels=labels,
                 title=title,
-                ps=plotstyle
+                ps=plotstyle,
+                colors=colors
                 )
     qu.SaveSubplots(fig, ax, [plotname, plotname + '_zoom'], savedir=plotpath, ps=plotstyle)
     plt.show()

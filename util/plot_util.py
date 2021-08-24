@@ -59,7 +59,7 @@ def multiplot_common(ax, xcenter, lines, labels, xlabel, ylabel,
                     atlas_x=-1, atlas_y=-1, simulation=False,
                     textlist=[],
                     title = '',
-                    ps = qu.PlotStyle('dark')):
+                    ps = qu.PlotStyle('dark'), colors=None):
     '''
     Creates a set of plots, on a common carrier "xcenter".
     Draws the plots on a provided axis.
@@ -76,7 +76,7 @@ def multiplot_common(ax, xcenter, lines, labels, xlabel, ylabel,
     for extra_line in extra_lines:
         ax.plot(extra_line[0], extra_line[1], linestyle='--', color='black')
 
-    colors = ps.colors
+    if(colors is None): colors = ps.colors
 
     for i, line in enumerate(lines):
         if len(linestyles) > 0:
@@ -113,7 +113,7 @@ def multiplot(ax, xlist, ylist,
               extra_lines=[], labels=[], 
               atlas_x=-1, atlas_y=-1, simulation=False,  
               textlist=[], title='', 
-              ps = qu.PlotStyle('dark')):
+              ps = qu.PlotStyle('dark'), colors=None):
     
     '''
     Creates a set of plots, from series of x and y values (does not use a common carrier).
@@ -122,7 +122,7 @@ def multiplot(ax, xlist, ylist,
     for extra_line in extra_lines:
         ax.plot(extra_line[0], extra_line[1], linestyle='--', color=ps.main_plt)
         
-    colors = ps.colors
+    if(colors is None): colors = ps.colors
 
     for i, (x,y) in enumerate(zip(xlist,ylist)):
         if len(linestyles) > 0:
@@ -132,7 +132,7 @@ def multiplot(ax, xlist, ylist,
         if colorgrouping > 0:
             color = colors[int(np.floor(i / colorgrouping))]
         else:
-            color = colors[i%(len(colors)-1)]
+            color = colors[i%(len(colors))]
         label = None
         if len(labels) > 0:
             label = labels[i]
@@ -164,7 +164,9 @@ def roc_plot(ax, xlist, ylist,
              extra_lines=[[[0, 1], [0, 1]]], labels=[],
              atlas_x=-1, atlas_y=-1, simulation=False,
              textlist=[], title='',
-             ps = qu.PlotStyle('dark')):
+             ps = qu.PlotStyle('dark'),
+             colors = None
+            ):
     '''
     Shortcut for making a ROC curve.
     '''
@@ -177,7 +179,7 @@ def roc_plot(ax, xlist, ylist,
               extra_lines=extra_lines, labels=labels,
               atlas_x=atlas_x, atlas_y=atlas_y, simulation=simulation,
               textlist=textlist, title=title,
-              ps=ps
+              ps=ps, colors=colors
     )
     return
     
