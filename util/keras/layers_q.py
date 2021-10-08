@@ -1,4 +1,4 @@
-# Here we can code up custom layers to implement in models.py
+# WORK IN PROGRESS
 
 # See this reference
 # https://github.com/priya-dwivedi/Deep-Learning/blob/master/resnet_keras/Residual_Networks_yourself.ipynb (in use)
