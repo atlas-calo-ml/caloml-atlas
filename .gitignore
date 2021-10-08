@@ -14,6 +14,10 @@ classifier/Plots
 classifier/Models
 regression/Plots
 regression/Models
+regression2/Plots
+regression2/Models
+regression_binned/Plots
+regression_binned/Models
 clusters/Plots
 jets/Plots
 jets/clusterPlots
