@@ -8,8 +8,11 @@ import tensorflow as tf
 # Given some input, indices, and a model filename,
 # train an instance of the given model,
 # or load the model if it already exists.
+# One can pass data as numpy arrays (x_train, y_train, x_valid, y_valid)
 def TrainNetwork(model, 
-                 modelfile, 
+                 modelfile,
+                 data_train=None,
+                 data_valid=None,
                  x_train=None, y_train=None, 
                  x_valid=None, y_valid=None, 
                  callbacks = [],
@@ -17,6 +20,17 @@ def TrainNetwork(model,
                  epochs=20, batch_size=200, verbose=1, 
                  overwriteModel=False, finishTraining=False,
                  custom_objects = None):
+    '''
+    Given some input, indices and a model filename, train an instance of the given model,
+    or load the model if it already exists.
+    
+    One can pass data as numpy arrays (x_train, y_train, x_valid, y_valid) or as a tensorflow.data.Dataset (data_train, data_valid).
+    If the data_train and data_valid arguments are given, then the numpy array arguments (x_train, y_train etc.) will be ignored.
+    '''
+
+    # Whether to use tf.data or numpy arrays.
+    if(data_train is not None): use_tf_data = True
+    else: use_tf_data = False
     
     # If no custom_objects provided, assume model type is our custom class, that packages the custom_objects with the model.
     if(custom_objects is None): model, custom_objects = model.model(), model.custom_objects
@@ -83,24 +97,47 @@ def TrainNetwork(model,
 #         train_data = train_data.with_options(options)
 #         valid_data = valid_data.with_options(options)
 
-        # TODO: The use of tf.data.Dataset causes validation to stop working (val_acc stuck at 0.5). Why?
-        
-        if(sample_weight == None): sample_weight=(None,None)        
-        history = model.fit(
-            x_train, y_train,
-            validation_data=(
-                x_valid,
-                y_valid,
-                sample_weight[1]
-            ),
-            epochs=epochs,
-            initial_epoch=initial_epoch,
-            batch_size=batch_size,
-            verbose=verbose,
-            callbacks=callbacks,
-            sample_weight=sample_weight[0]
-        )
-    
+        if(sample_weight == None): sample_weight=(None,None)
+            
+        if(not use_tf_data):
+            
+            history = model.fit(
+                x_train, y_train,
+                validation_data=(
+                    x_valid,
+                    y_valid,
+                    sample_weight[1]
+                ),
+                epochs=epochs,
+                initial_epoch=initial_epoch,
+                batch_size=batch_size,
+                verbose=verbose,
+                callbacks=callbacks,
+                sample_weight=sample_weight[0]
+            )
+            
+        else:
+            
+            #data_train = data_train.batch(batch_size)
+            #data_valid = data_valid.batch(batch_size)
+            
+            # Disable autosharding. TODO: Is this necessary?
+            #options = Options()
+            #options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+            #data_train = data_train.with_options(options)
+            #data_valid = data_valid.with_options(options)
+            
+            history = model.fit(
+                data_train,
+                validation_data=data_valid,
+                epochs=epochs,
+                initial_epoch=initial_epoch,
+                batch_size=batch_size,
+                verbose=verbose,
+                callbacks=callbacks,
+                sample_weight=sample_weight[0]
+            )
+            
     saveModel = True
     if(initial_epoch == epochs or not finishTraining): saveModel = False
     if(saveModel):

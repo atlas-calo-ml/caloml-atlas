@@ -249,7 +249,7 @@ def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTr
         for key in keys:
             pcells[key] = {}
             for layer in layers:
-                pcells[key][layer] = setupCells(arrays[key],layer)
+                pcells[key][layer] = setupCells_new(arrays[key],layer)
                 i+=1
                 if(verbose): qu.printProgressBarColor (i, nentries, prefix='Preparing calorimeter images.', suffix='% Complete', length=40)
         
@@ -372,7 +372,7 @@ def setupScalers(pdata, branch_names, scaler_file='', scaled_variable_prefix='s'
             frame['{}_{}'.format(scaled_variable_prefix, branch)] = scalers[key][branch].transform(frame[branch].to_numpy().reshape(-1,1))
     return scalers
     
-def setupCells(arrays, layer, nrows = -1, indices = [], flatten=True):
+def setupCells_new(arrays, layer, nrows = -1, indices = [], flatten=True):
     if(type(arrays) != list): arrays = [arrays]
     if(type(layer) != list): layer = [layer]
     # Slightly different behaviour depending on whether the elements of arrays
@@ -387,7 +387,7 @@ def setupCells(arrays, layer, nrows = -1, indices = [], flatten=True):
     return array
 
 # Old version of setupCells, keeping this for backwards compatibility
-def setupCellsLegacy(tree, layer, nrows = -1, indices = [], flatten=True):
+def setupCells(tree, layer, nrows = -1, indices = [], flatten=True):
     array = tree.arrays([layer], library='np')[layer]
     if nrows > 0:
         array = array[:nrows]
@@ -398,7 +398,7 @@ def setupCellsLegacy(tree, layer, nrows = -1, indices = [], flatten=True):
         array = array.reshape(len(array), num_pixels)
     return array
 
-def standardCells(arrays, layer, nrows = -1, indices = []):
+def standardCells_new(arrays, layer, nrows = -1, indices = []):
     if(type(arrays) != list): arrays = [arrays]
     if(type(layer) != list): layer = [layer]
     # Slightly different behaviour depending on whether the elements of arrays
@@ -418,7 +418,7 @@ def standardCells(arrays, layer, nrows = -1, indices = []):
     return array
 
 # Old version of standardCells, keeping this for backwards compatibility
-def standardCellsLegacy(array, layer, nrows = -1):
+def standardCells(array, layer, nrows = -1):
     if nrows > 0: 
         working_array = array[:nrows]
     else: 
