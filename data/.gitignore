@@ -1,0 +1,7 @@
+pion/*
+pion_legacy/*
+pion_converted/*
+pion_graph/*
+jet/*
+*.png
+*.pdf

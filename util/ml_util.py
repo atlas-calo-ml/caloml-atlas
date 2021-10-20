@@ -1,15 +1,16 @@
+import pathlib
 import numpy as np  
+import uproot as ur
+import awkward as ak
+import pandas as pd
+import h5py as h5
+import joblib as jl
 from sklearn.model_selection import ShuffleSplit
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_curve, auc
-import uproot as ur
-from keras import utils
-import pandas as pd
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import atlas_mpl_style as ampl
+from tensorflow.keras import utils
 import scipy.ndimage as ndi
-ampl.use_atlas_style()
+from util import qol_util as qu
 
 #define a dict for cell meta data
 cell_meta = {
@@ -76,45 +77,316 @@ def reshapeSeparateCNN(cells):
 
     return reshaped
 
-def setupPionData(inputpath, rootfiles, branches = []):
-    # defaultBranches = ['runNumber', 'eventNumber', 'truthE', 'truthPt', 'truthEta', 'truthPhi', 'clusterIndex', 'nCluster', 'clusterE', 'clusterECalib', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_ENG_CALIB_TOT', 'cluster_ENG_CALIB_OUT_T', 'cluster_ENG_CALIB_DEAD_TOT', 'cluster_EM_PROBABILITY', 'cluster_HAD_WEIGHT',
-                # 'cluster_OOC_WEIGHT', 'cluster_DM_WEIGHT', 'cluster_CENTER_MAG', 'cluster_FIRST_ENG_DENS', 'cluster_cell_dR_min', 'cluster_cell_dR_max', 'cluster_cell_dEta_min', 'cluster_cell_dEta_max', 'cluster_cell_dPhi_min', 'cluster_cell_dPhi_max', 'cluster_cell_centerCellEta', 'cluster_cell_centerCellPhi', 'cluster_cell_centerCellLayer', 'cluster_cellE_norm']
-    defaultBranches = ['clusterIndex', 'truthE', 'nCluster', 'clusterE', 'clusterECalib', 'clusterPt', 'clusterEta', 'clusterPhi', 'cluster_nCells', 'cluster_sumCellE', 'cluster_ENG_CALIB_TOT', 'cluster_ENG_CALIB_OUT_T', 'cluster_ENG_CALIB_DEAD_TOT', 'cluster_EM_PROBABILITY', 'cluster_HAD_WEIGHT', 'cluster_CENTER_MAG', 'cluster_FIRST_ENG_DENS', 'cluster_cellE_norm']
+def ApplyCuts(arrays, cut_distributions, cut_values, cut_types, verbose):
+    keys = arrays.keys()
+    indices = {}
+    for key in keys: indices[key] = np.arange(0,len(arrays[key]))
+            
+    # Filter out clusters that do not pass some cut.
+    if(cut_distributions != []):
+        selected_indices = {key: np.full(len(arrays[key]),True,dtype=bool) for key in keys}
 
-    if len(branches) == 0:
-        branches = defaultBranches
+    # TODO: Add support for more complex cuts. Currently support cutting on branch, or multiplication/division of two branches.
+    for i, cut_distrib in enumerate(cut_distributions):
+        if(verbose): print('Applying cut on distribution: {}.'.format(cut_distrib))
+        cut_value = cut_values[i]
+        cut_type = cut_types[i]
+        
+        for key in keys:
+            if('/' in cut_distrib):
+                cut_distribs = cut_distrib.split('/')
+                denominator = arrays[key][cut_distribs[1]].to_numpy()
+                
+                denominator[denominator == 0.] = 1.
+                val_array = arrays[key][cut_distribs[0]].to_numpy() / denominator
 
-    trees = {
-        rfile: ur.open(inputpath+rfile+".root")['ClusterTree']
-        for rfile in rootfiles
-    }
-    pdata = {
-        ifile: pd.DataFrame(itree.arrays(expressions=branches, library='np'))
-        for ifile, itree in trees.items()
-    }
+            elif('*' in cut_distrib):
+                cut_distribs = cut_distrib.split('*')
+                val_array = arrays[key][cut_distribs[0]].to_numpy() * arrays[key][cut_distribs[1]].to_numpy()
 
-    return trees, pdata
+            else: val_array = arrays[key][cut_distrib].to_numpy()
 
-def splitFrameTVT(frame, trainlabel='train', trainfrac = 0.8, testlabel='test', testfrac = 0.2, vallabel='val'):
+            if cut_type == 'lower': sel = (val_array > cut_value)
+            elif cut_type == 'upper': sel = (val_array < cut_value)
+            elif cut_type == 'window': sel = (val_array > cut_value[0]) * (val_array < cut_value[1])
+            else:
+                print('Warning: Cut type {} not understood.'.format(cut_type))
+                continue 
+            #selected_indices[key] *= sel.to_numpy()
+            selected_indices[key] *= sel
 
-    valfrac = 1.0 - trainfrac - testfrac
-    
-    train_split = ShuffleSplit(n_splits=1, test_size=testfrac + valfrac, random_state=0)
-    # advance the generator once with the next function
-    train_index, testval_index = next(train_split.split(frame))  
+    indices = {key:val[selected_indices[key]] for key,val in indices.items()}
+    return indices
 
-    if valfrac > 0:
-        testval_split = ShuffleSplit(
-            n_splits=1, test_size=valfrac / (valfrac+testfrac), random_state=0)
-        test_index, val_index = next(testval_split.split(testval_index)) 
+def setupPionData(root_file_dict,branches=[], layers=[], cluster_tree='ClusterTree', 
+                  balance_data=True, n_max=-1, 
+                  cut_distributions=[], cut_values=[], cut_types=[],
+                  match_distribution='', match_binning=(), match_log=False,
+                  verbose=False, load=False, save=False, filename='', return_indices=False):
+
+    pdata = {}
+    pcells = {}
+    keys = list(root_file_dict.keys())
+    rng = np.random.default_rng()
+
+    pdata_filename = filename + '_frame.h5'
+    pcell_filename = filename + '_images.h5'
+    selec_filename = filename + '_selections.h5'
+
+    if(load and pathlib.Path(pdata_filename).exists() and pathlib.Path(pcell_filename).exists()):
+        
+        if(verbose): print('Loading pandas DataFrame and calo images from {} and {}.'.format(pdata_filename,pcell_filename))
+        # Load the DataFrame and images from disk.
+        pdata = {
+            key: pd.read_hdf(pdata_filename,key=key)
+            for key in keys
+        }
+        
+        hf = h5.File(pcell_filename,'r')
+        for key in keys:
+            pcells[key] = {}
+            for layer in layers:
+                pcells[key][layer] = hf['{}:{}'.format(key,layer)][:]
+        hf.close()
+        
+        if(return_indices): # TODO: Rework this a little!
+            hf = h5.File(selec_filename,'r')
+            indices = {key: hf[key][:] for key in keys}
+            hf.close()
+            
     else:
-        test_index = testval_index
-        val_index = []
+        
+        # root_file_dict entries might be glob-style strings, or lists of files. We should consider both possibilities.
+        arrays = {}
+        for key,root_files in root_file_dict.items():
+            if(type(root_files) == list):
+                arrays[key] = ur.lazy([':'.join((x,cluster_tree)) for x in root_files], filter_branch=lambda x: x.name in branches)
+            else:
+                arrays[key] = ur.lazy(':'.join((root_files, cluster_tree)), filter_branch=lambda x: x.name in branches)
+
+        indices = ApplyCuts(arrays, cut_distributions, cut_values, cut_types, verbose)
+                                
+        # Filter out clusters so that our data series match in their distribution of a user-supplied variable.
+        if(match_distribution != ''):
+            if(match_distribution in branches and len(match_binning) == 3):
+                if(verbose): print('Matching data series on distribution: {}.'.format(match_distribution))
+                                                
+                binning = np.linspace(match_binning[1],match_binning[2],match_binning[0]+1)
+                n_bins = len(binning) - 1
+                distributions = {
+                    key: np.histogram(arrays[key][match_distribution][indices[key]].to_numpy(), bins=binning)[0] # only keep bin counts
+                    for key in keys
+                }
+                
+                # Now determine how many clusters we keep in each bin, for each key.
+                n_keep = np.zeros(n_bins,dtype=np.dtype('i8'))
+                for i in range(n_bins):
+                    n_keep[i] = int(np.min([x[i] for x in distributions.values()]))
+                    
+                # Now we need to throw out some clusters -- in other words, only keep some.
+                # We will randomly choose which ones we keep, for each match_distribution bin,
+                # for each data series (key).
+                for key in keys:
+                    sorted_indices = indices[key][np.argsort(arrays[key][match_distribution][indices[key]])]
+                    keep_indices = []
+                    bin_idx_edges = np.insert(np.cumsum(distributions[key]),0,0)
+                    for i in range(n_bins):
+                        index_block = sorted_indices[bin_idx_edges[i]:bin_idx_edges[i+1]] # all indices corresponding to the i'th bin of match_distribution, for this key
+                        keep_indices.append(rng.choice(index_block, n_keep[i], replace=False))
+                    n_before = len(indices[key])
+                    indices[key] = np.hstack(keep_indices)
+                    n_after = len(indices[key])
+                    #if(verbose): print('\t{}, number of events: {} -> {}'.format(key, n_before, n_after))
+                                    
+            else: print('Warning: Requested matching of distribution \"{}\" but this variable is not among the branches you selected from the data. Skipping this step.'.format(match_distribution))            
+            
+        # Balance data so we have equal amounts of each category.
+        # Note that if we did the matching above, we can potentially skip this as
+        # balancing was implicitly done. However, we might want to take the opportunity
+        # to further slim down our dataset.
+        if(balance_data):
+            n_max_tmp = np.min([len(x) for x in indices.values()])
+            if(n_max > 0): n_max = np.minimum(n_max_tmp, n_max)
+            else: n_max = n_max_tmp
+            
+            if(verbose): print('Balancing data: {} events per category.'.format(n_max))
+            indices = {key:rng.choice(val, n_max, replace=False) for key,val in indices.items()}
+
+        # Make a boolean mask from the indices. This speeds things up below, as opposed to passing (unsorted) lists of indices.
+        for key in indices.keys():
+            msk = np.zeros(len(arrays[key]),dtype=bool)
+            msk[indices[key]] = True
+            indices[key] = msk
+    
+        # Now, apply our selection indices to the arrays.
+        arrays = {
+            key:arrays[key][indices[key]]
+            for key in keys
+        }
+        
+        # Make the dataframes from the arrays.
+        if(verbose): print('Preparing pandas DataFrame.')
+        pdata = {
+            key: ak.to_pandas(arrays[key][branches])
+            for key in keys
+        }
+    
+        # Re-make the arrays with just our layer info (using our selection indices again).
+        arrays = {}
+        for key,root_files in root_file_dict.items():
+            if(type(root_files) == list):
+                arrays[key] = ur.lazy([':'.join((x,cluster_tree)) for x in root_files], filter_branch=lambda x: x.name in layers)[indices[key]]
+            else:
+                arrays[key] = ur.lazy(':'.join((root_files, cluster_tree)), filter_branch=lambda x: x.name in layers)[indices[key]]
+
+        
+        # Make our calorimeter images.
+        nentries = len(keys) * len(layers)
+        i = 0
+        if(verbose): qu.printProgressBarColor (i, nentries, prefix='Preparing calorimeter images.', suffix='% Complete', length=40)
+
+        pcells = {}
+        for key in keys:
+            pcells[key] = {}
+            for layer in layers:
+                pcells[key][layer] = setupCells_new(arrays[key],layer)
+                i+=1
+                if(verbose): qu.printProgressBarColor (i, nentries, prefix='Preparing calorimeter images.', suffix='% Complete', length=40)
+        
+        # Save the dataframes and calorimeter images in HDF5 format for easy access next time.
+        if(filename != '' and save):
+            if(verbose): print('Saving DataFrames to {}.'.format(pdata_filename))
+            for key,frame in pdata.items():
+                frame.to_hdf(pdata_filename, key=key, mode='a',complevel=6)   
+                
+            if(verbose): print('Saving calorimeter images to {}.'.format(pcell_filename))
+                
+            hf = h5.File(pcell_filename, 'w')
+            for key in pcells.keys():
+                for layer in layers:
+                    dset = hf.create_dataset('{}:{}'.format(key,layer), data=pcells[key][layer], chunks=True, compression='gzip', compression_opts=7)
+            hf.close()
+            
+    # One may optionally also save the selected event indices. This can be useful if referring back to the original data source.
+    if(return_indices):
+        # Save the indices to a file.
+        hf = h5.File(selec_filename, 'w')
+        for key in indices.keys():
+            dset = hf.create_dataset(key, data=indices[key], chunks=True, compression='gzip', compression_opts=7)
+        hf.close()
+        return pdata, pcells, indices # return indices
+    return pdata, pcells # don't return indices
+
+def splitFrameTVT(frame,
+                  trainlabel='train', trainfrac=0.8, 
+                  testlabel='test', testfrac=0.2, 
+                  vallabel='val',
+                  key = 'None',
+                  filename=''):
+
+    compute_indices = True
+    # Optionally load indices, if the requested file exists and the appropriate key can be found in it.
+    if(filename != '' and pathlib.Path(filename).exists()):
+        f = h5.File(filename,'r')
+        search_keys = ['{}_'.format(key) + x for x in ['train','test','valid']]
+        f_keys = list(f.keys())
+        matches = [(x in f_keys) for x in search_keys]
+        
+        if(False in matches):
+            if(True in matches): print('Warning: Some but not all indices found for key {}. Remaking these indices.'.format(key))
+            compute_indices = True
+        else:
+            print('Loading indices for key {} from {}.'.format(key,filename))
+            train_index = f['{}_train'.format(key)][:]
+            test_index = f['{}_test'.format(key)  ][:]
+            val_index = f['{}_valid'.format(key)  ][:]
+            compute_indices = False
+        f.close()
+        
+    if(compute_indices):
+        valfrac = 1.0 - trainfrac - testfrac
+
+        train_split = ShuffleSplit(n_splits=1, test_size=testfrac + valfrac, random_state=0)
+        # advance the generator once with the next function
+        train_index, testval_index = next(train_split.split(frame))  
+
+        if valfrac > 0:
+            testval_split = ShuffleSplit(
+                n_splits=1, test_size=valfrac / (valfrac+testfrac), random_state=0)
+            test_index, val_index = next(testval_split.split(testval_index))
+            
+            # test_index & val_index give indices w.r.t. testval_index, need to convert these
+            test_index = testval_index[test_index]
+            val_index = testval_index[val_index]
+            
+        else:
+            test_index = testval_index
+            val_index = []
         
     frame[trainlabel] = frame.index.isin(train_index)
     frame[testlabel]  = frame.index.isin(test_index)
     frame[vallabel]   = frame.index.isin(val_index)
 
+    # Save indices, if they are not already present. TODO: Consider skipping write if nothing changed, to avoid changing file timestamp.
+    if(filename != ''):
+        f = h5.File(filename,'a')
+        f_keys = list(f.keys())
+        write_keys = [x.format(key) for x in ['{}_train','{}_test','{}_valid']]
+        indices = [train_index, test_index, val_index]
+        for i,wkey in enumerate(write_keys):
+            if(wkey in f_keys): continue
+#             print('\tWriting index: {}'.format(wkey))
+            dset = f.create_dataset(wkey, data=indices[i], chunks=True, compression='gzip', compression_opts=5)
+        f.close()
+    return
+      
+def setupScalers(pdata, branch_names, scaler_file='', scaled_variable_prefix='s'):
+    compute_scalers = True
+    # load scalers from file if it exists
+    if(scaler_file != '' and pathlib.Path(scaler_file).exists()):
+        print('Loading scalers from {}.'.format(scaler_file))
+        scalers = jl.load(scaler_file)
+        compute_scalers = False
+        # check that we have all the requested scalers in this file, otherwise remake them all
+        keys = scalers[list(scalers.keys())[0]].keys()
+        for key in keys:
+            if(key not in branch_names):
+                print('\tWarning: Did not find key {}. Will recompute all scalers & save.'.format(key))
+                compute_scalers = True
+                break
+        
+    # create (and save) scalers if file does not exist (or if some scalers were missing)
+    if(compute_scalers):
+        scalers = {}
+        for key,frame in pdata.items():
+            scalers[key] = {}
+            for branch in branch_names:
+                scalers[key][branch] = StandardScaler()
+                scalers[key][branch].fit(frame[frame['train']==True][branch].to_numpy().reshape(-1,1))
+                
+        if(scaler_file != ''): result = jl.dump(scalers, scaler_file)
+            
+    # apply scalers to pdata
+    for key,frame in pdata.items():
+        for branch in branch_names:
+            frame['{}_{}'.format(scaled_variable_prefix, branch)] = scalers[key][branch].transform(frame[branch].to_numpy().reshape(-1,1))
+    return scalers
+    
+def setupCells_new(arrays, layer, nrows = -1, indices = [], flatten=True):
+    if(type(arrays) != list): arrays = [arrays]
+    if(type(layer) != list): layer = [layer]
+    # Slightly different behaviour depending on whether the elements of arrays
+    # are awkward arrays or numpy arrays -- if the former, we must convert to numpy.
+    if(type(arrays[0][layer[0]]) == np.ndarray): array = np.row_stack([np.concatenate([arr[l] for l in layer], axis=1) for arr in arrays])
+    else: array = np.row_stack([np.concatenate([arr[l].to_numpy() for l in layer], axis=1) for arr in arrays])    
+    
+    if nrows > 0: array = array[:nrows]
+    elif len(indices) > 0: array = array[indices]
+    num_pixels = np.sum([cell_meta[l]['len_phi'] * cell_meta[l]['len_eta'] for l in layer])
+    if flatten: array = array.reshape(len(array), num_pixels)
+    return array
+
+# Old version of setupCells, keeping this for backwards compatibility
 def setupCells(tree, layer, nrows = -1, indices = [], flatten=True):
     array = tree.arrays([layer], library='np')[layer]
     if nrows > 0:
@@ -124,15 +396,33 @@ def setupCells(tree, layer, nrows = -1, indices = [], flatten=True):
     num_pixels = cell_meta[layer]['len_phi'] * cell_meta[layer]['len_eta']
     if flatten:
         array = array.reshape(len(array), num_pixels)
-    
     return array
 
-def standardCells(array, layer, nrows = -1):
-    if nrows > 0:
-        working_array = array[:nrows]
-    else:
-        working_array = array
+def standardCells_new(arrays, layer, nrows = -1, indices = []):
+    if(type(arrays) != list): arrays = [arrays]
+    if(type(layer) != list): layer = [layer]
+    # Slightly different behaviour depending on whether the elements of arrays
+    # are awkward arrays or numpy arrays -- if the former, we must convert to numpy.
+    
+    if(type(arrays[0][layer[0]]) == np.ndarray): array = np.row_stack([np.concatenate([arr[l] for l in layer], axis=1) for arr in arrays])
+    else: array = np.row_stack([np.concatenate([arr[l].to_numpy() for l in layer], axis=1) for arr in arrays])        
+                
+    if nrows > 0: array = array[:nrows]
+    elif len(indices) > 0: array = array[indices]
+        
+    num_pixels = np.sum([cell_meta[l]['len_phi'] * cell_meta[l]['len_eta'] for l in layer])
+    num_clusters = len(array)
+    scaler = StandardScaler()
+    array = array.reshape((num_clusters * num_pixels, 1))
+    array = scaler.fit_transform(array).reshape((num_clusters, num_pixels))
+    return array
 
+# Old version of standardCells, keeping this for backwards compatibility
+def standardCells(array, layer, nrows = -1):
+    if nrows > 0: 
+        working_array = array[:nrows]
+    else: 
+        working_array = array
     scaler = StandardScaler()
     if type(layer) == str:
         num_pixels = cell_meta[layer]['len_phi'] * cell_meta[layer]['len_eta']
@@ -144,12 +434,8 @@ def standardCells(array, layer, nrows = -1):
         print('you should not be here')
 
     num_clusters = len(working_array)
-
     flat_array = np.array(working_array.reshape(num_clusters * num_pixels, 1))
-
-
     scaled = scaler.fit_transform(flat_array)
-
     reshaped = scaled.reshape(num_clusters, num_pixels)
     return reshaped, scaler
 
@@ -358,7 +644,9 @@ class cell_info:
         return self.get_cell_info(key)
 
 def create_cell_images(input_file, sampling_layers, c_info=None,
-                       eta_range=0.4, phi_range=0.4, print_frequency=100):
+                       eta_range=0.4, phi_range=0.4, print_frequency=100, 
+                       entries=-1, prefix = ''):
+
     '''Generates images from a 'graph' format input file.
     The output is a dictionary with the following structure:
       images[layer][event_index][eta_index][phi_index]
@@ -389,7 +677,8 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
         raise ValueError('Invalid argument for c_info: must be cell_info object or path to a root file with the CellGeo tree.')
     
     with ur.open(input_file) as ifile:
-        entries = ifile['EventTree'].num_entries
+        if(entries < 0): entries = ifile['EventTree'].num_entries
+
         pdata = ifile['EventTree'].arrays(
             ['cluster_cell_ID', 'cluster_cell_E', 'cluster_E', 'cluster_Eta', 'cluster_Phi'])
     
@@ -398,16 +687,18 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
     
     pcells = {
         layer : np.zeros((entries,meta['len_eta'],meta['len_phi']))
-        for layer,meta in mu.cell_meta.items()
+        for layer,meta in cell_meta.items()
     }
+    qu.printProgressBarColor (0, entries, prefix=prefix, suffix='% Complete', length=50)
     
     for evt in range(entries):
-        if((evt+1)%print_frequency==0):
-            print('Event {}/{}'.format(evt+1,entries))
-            
+        if((evt)%print_frequency==0 or evt==entries-1):
+            qu.printProgressBarColor (evt+1, entries, prefix=prefix, suffix='% Complete', length=50)
         for clus in range(len(pdata['cluster_cell_ID'][evt])):
             for cell in range(len(pdata['cluster_cell_ID'][evt][clus])):
+                
                 c_info = ci[pdata['cluster_cell_ID'][evt][clus][cell]]
+                
                 if c_info['cell_geo_sampling'] in sampling_layers:
                     layer = sampling_layers[c_info['cell_geo_sampling']]
                     c_eta = pdata['cluster_Eta'][evt][clus]
@@ -417,22 +708,29 @@ def create_cell_images(input_file, sampling_layers, c_info=None,
                     #   bin = floor( (x-x_min) * nbins / x_range )
                     eta_bin = int(
                         (c_info['cell_geo_eta']-c_eta-eta_min) *
-                        mu.cell_meta[layer]['len_eta'] / eta_range
+                        cell_meta[layer]['len_eta'] / eta_range
                     )
                     phi_bin = int(
                         (c_info['cell_geo_phi']-c_phi-phi_min) *
-                        mu.cell_meta[layer]['len_phi'] / phi_range
+                        cell_meta[layer]['len_phi'] / phi_range
                     )
 
                     # discard cells outside the eta/phi window
                     if(eta_bin<0 or
-                       eta_bin>=mu.cell_meta[layer]['len_eta'] or
+                       eta_bin>=cell_meta[layer]['len_eta'] or
                        phi_bin<0 or
-                       phi_bin>=mu.cell_meta[layer]['len_phi']):
+                       phi_bin>=cell_meta[layer]['len_phi']):
                         continue
 
                     pcells[layer][evt][eta_bin][phi_bin] += pdata['cluster_cell_E'][evt][clus][cell] / pdata['cluster_E'][evt][clus]
                     # note: 'cluster_E' includes energies from cells with <5 MeV, which are not
-                    # included in this dataset, so the energy fraction will be slightly off
-        
+                    # included in some datasets, so the energy fraction may be slightly off
+
     return pcells
+
+# Some (experimenmtal) functions for turning calo images into sets of 4-vectors
+
+# given eta, E and m, return the p_T
+def EtaEM2Pt(eta,e,m):
+    return np.sqrt(np.square(E) - np.square(m)) / np.cosh(eta)
+

@@ -1,0 +1,86 @@
+import tensorflow as tf
+from util.keras import clr, lrlog, lr_schedule, epoch_update
+
+# -- Define a bunch of different callbacks... --
+
+# Checkpoint the model (by default, at every epoch).
+def Checkpoint(modelfile, monitor='val_loss', save_best_only=False,save_freq='epoch'):
+    if('.h5' not in modelfile): modelfile = modelfile #+ '.ckpt'
+    return tf.keras.callbacks.ModelCheckpoint(
+        filepath=modelfile,
+        monitor=monitor,
+        verbose=0,
+        save_best_only=save_best_only,
+        save_weights_only=False,
+        mode='auto',
+        save_freq=save_freq
+    )
+
+# Log our trainng metrics (loss etc.) in a CSV file.
+def Logger(modelfile, append=True):
+    history_filename = '.'.join(modelfile.split('.')[:-1]) + '.csv'
+    return tf.keras.callbacks.CSVLogger(
+        filename=history_filename,
+        append=append
+    )
+
+# Exponential learning rate decay.
+def LrDecay(gamma=0.1, offset=0):
+    return lr_schedule.LearningRateSchedule(mode='exp',gamma=gamma, offset=offset)
+
+# Add learning rate to the list of logged parameters.
+def LrLog():
+    return lrlog.LRLog()
+
+# Modify the optimizer to use a cyclic learning rate.
+def CyclicLearningRate(**kwargs):
+    return clr.CyclicLearningRate(**kwargs)
+
+# Early stopping
+def EarlyStop(monitor='val_loss', min_delta=.01, patience=2, verbose=1, restore_best_weights=True):
+    return tf.keras.callbacks.EarlyStopping(
+        monitor=monitor,
+        min_delta=min_delta,
+        patience=patience,
+        verbose=verbose,
+        restore_best_weights=restore_best_weights
+    )
+    
+
+# -- ... and a function that simply returns a default set of them! --
+def GetCallbacks(modelfile, append=True, use_decay=True, use_clr=False, use_stopping=True, use_checkpoint=True, **kwargs):
+    
+    callbacks = []
+    
+    if(use_checkpoint):
+        checkpt = Checkpoint(modelfile, save_best_only=use_stopping)
+        callbacks.append(checkpt)
+    
+    lrl = LrLog()
+    logger = Logger(modelfile,append)
+
+    if(use_decay):
+        offset = 0
+        if('offset' in kwargs.keys()):
+            offset = kwargs['offset']
+        decay = LrDecay(kwargs['gamma'], offset)
+        callbacks.append(decay)
+    if(use_clr):
+        CLR = CyclicLearningRate(**kwargs)
+        callbacks.append(CLR)
+        
+    if(use_stopping):
+        if('min_delta' in kwargs.keys()): min_delta = kwargs['min_delta']
+        else: min_delta = 0.01
+            
+        if('patience' in kwargs.keys()): patience = kwargs['patience']
+        else: patience = 2            
+            
+        early_stop = EarlyStop(
+            min_delta=min_delta,
+            patience=patience
+        )
+        callbacks.append(early_stop)
+
+    callbacks = callbacks + [lrl, logger]
+    return callbacks

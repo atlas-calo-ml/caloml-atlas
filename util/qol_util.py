@@ -1,10 +1,24 @@
 # Just some simple, quality-of-life functions. Nothing very fancy.
 
 import numpy as np
+import matplotlib.pyplot as plt
 import ROOT as rt
 import sys, os, uuid
 
-# 1) Progress bars.
+# For writing values with errors
+def str_with_err(value,error,digits=2):
+    try:
+        power = int(np.floor(np.log10(value)))
+        val = value * 10**(-power)
+        val_str = ('{:.' +str(int(digits)) + 'f}').format(val)
+        err = error * 10**(-power)
+        error_str =  ('{:.' +str(int(digits)) + 'f}').format(err)
+        power_str = str(np.abs(power)).zfill(2)
+        if(np.sign(power) < 0): power_str = '-' + power_str
+        result = '(' + val_str + ' #pm ' + error_str + ')e' + power_str
+    except:
+        result = 'NaN'
+    return result
 
 # Print iterations progress.
 # Adapted from https://stackoverflow.com/a/34325723.
@@ -40,7 +54,8 @@ def printProgressBarColor (iteration, total, prefix = '', suffix = '', decimals 
     printProgressBar(iteration, total, prefix = prefix, suffix = suffix, decimals = decimals, length = length, fill = fill, printEnd = printEnd)
     return
 
-#2) Plot display/adjustments.
+# Plot display/adjustments.
+# This sets a bunch of colors, for both PyROOT and matplotlib.
 class PlotStyle:
     def __init__(self, mode = 'dark'):
         if(mode != 'dark'): mode = 'light'
@@ -50,13 +65,54 @@ class PlotStyle:
             self.canv  = rt.kWhite
             self.text  = rt.kBlack
             self.curve = rt.kBlue
-        
+            
+            self.text_plt = 'xkcd:black'
+            self.canv_plt = 'xkcd:white'
+            self.main_plt = 'xkcd:black'
+            self.grid_plt = '0.65'
+            self.curve_plt = 'xkcd:blue'
+            
         elif(mode == 'dark'):
             self.main  = rt.TColor.GetColor(52,165,218)
             self.canv  = rt.TColor.GetColor(34,34,34)
             self.text  = rt.kWhite
-            self.curve = rt.TColor.GetColor(231,114,61) 
+            self.curve = rt.TColor.GetColor(249,105,4)
+            
+            self.text_plt = 'xkcd:white'
+            self.canv_plt = '#222222' # dark grey
+            self.main_plt = '#34a5da' # light blue
+            self.grid_plt = '0.65'
+            self.curve_plt = '#f96904' # orange
+            
+        # list of matplotlib colors
+        self.colors = [
+            'xkcd:medium purple', # first pass thrpugh rainbow
+            'xkcd:periwinkle blue', 
+            'xkcd:aqua blue',
+            'xkcd:electric lime',
+            'xkcd:kelly green',
+            'xkcd:tangerine',
+            'xkcd:wheat',
+            'xkcd:bordeaux',
+            'xkcd:bright red',
+            'xkcd:baby purple', # second pass through rainbow
+            'xkcd:dark teal',
+            'xkcd:true blue',
+            'xkcd:very light green',
+            'xkcd:macaroni and cheese',
+            'xkcd:burnt orange',
+            'xkcd:brick red',
+            'xkcd:salmon'
+         ]
+        #self.colors.reverse() # put the reds first -- purple can be comparitively hard to see on dark background
         
+        # list of matplotlib linestyles
+        self.linestyles = [
+            '-',
+            ':',
+            '-.'
+        ]
+            
     def SetStyle(self):
         rt.gStyle.SetAxisColor(self.main,'xyz')
         rt.gStyle.SetGridColor(self.main)
@@ -72,12 +128,41 @@ class PlotStyle:
         rt.gStyle.SetLabelColor(self.text, 'xyz')
         rt.gStyle.SetStatTextColor(self.text)
         rt.gStyle.SetTextColor(self.text)
+        
+    def SetStylePlt(self, ax):
+        
+        # canvas color
+        ax.set_facecolor(self.canv_plt)
+    
+        # tick colors (marks, then tick labels)
+        ax.tick_params(axis='both',colors=self.main_plt, which='major')
+        ax.tick_params(axis='both',colors=self.text_plt, which='minor')
+        plt.setp(ax.get_xticklabels(), color=self.text_plt)
+        plt.setp(ax.get_yticklabels(), color=self.text_plt)
+    
+        # axis spines
+        for spine in ['bottom','top','left','right']:
+            ax.spines[spine].set_color(self.main_plt)
 
+        # axis titles
+        ax.xaxis.label.set_color(self.text_plt)
+        ax.yaxis.label.set_color(self.text_plt)
+    
+        # plot title
+        ax.title.set_color(self.text_plt)
+        
+        # grid color
+        ax.grid()
+        
+        # face color
+        ax.set_facecolor(self.canv_plt)
 
 # Setting a histogram's line and fill color in one go
-def SetColor(hist, color, alpha = 0.5):
-    hist.SetLineColor(color)
+def SetColor(hist, color, alpha = 1., style=0):
     hist.SetFillColorAlpha(color, alpha)
+    hist.SetLineColor(color)
+    if(style != 0): hist.SetFillStyle(style)
+    return
 
 def RN():
     return str(uuid.uuid4())
@@ -104,7 +189,20 @@ def DrawSet(hists, logx=False, logy=True, paves = 0):
             for pave in paves: pave.Draw()
     return canvas
 
-# 3) Hiding print statements.
+
+# Saving subplots to individual files. Can't believe this isn't built-in to matplotlib.
+def SaveSubplots(fig, axes, names, extensions = ['png'], savedir='', ps=PlotStyle('dark')):
+    assert(len(axes.flatten()) == len(names))
+    for i in range(len(names)):
+        bbox = axes.flatten()[i].get_tightbbox(fig.canvas.get_renderer()).transformed(fig.dpi_scale_trans.inverted())
+        
+        for ext in extensions:
+            savename = names[i] + '.' + ext
+            if(savedir != ''): savename = savedir + '/' + savename
+            plt.savefig(savename,bbox_inches=bbox, facecolor=ps.canv_plt)
+    return
+
+# Hiding print statements.
 # For hiding print statements. TODO: Not working for suppressing fastjet printouts.
 class HiddenPrints:
     def __enter__(self):
@@ -114,36 +212,4 @@ class HiddenPrints:
     def __exit__(self, exc_type, exc_val, exc_tb):
         sys.stdout.close()
         sys.stdout = self._original_stdout
-
-# -- Unused functions / funcs for deprecated workflows below --
-
-# Some ROOT/numpy stuff
-# Converting from ROOT type names to leaflist decorators.
-# Vector decorator will not work, but gives a sensible string
-# telling us the depth (how many vectors).
-def RTypeConversion(type_string):
-    if(type_string == 'Short_t' or type_string == 'short'):    return 'S'
-    elif(type_string == 'Int_t' or type_string == 'int'):    return 'I'
-    elif(type_string == 'Float_t' or type_string == 'float'):  return 'F'
-    elif(type_string == 'Double_t' or type_string == 'double'): return 'D'
-    elif('vector' in type_string): # special case
-#         type_substring = '<'.join(type_string.split('<')[1:])
-#         type_substring = '>'.join(type_substring.split('>')[:-1])
-#         type_substring = RTypeConversion(type_substring)
-#         return 'v_' + type_substring
-        return type_string
-    else: return '?'
-
-def GetShape(shape_string):
-    dims = shape_string.replace('[',' ').replace(']', ' ').split()
-    return tuple([int(x) for x in dims])
-
-def RType2NType(type_string):
-    if(type_string == 'S'):   return np.dtype('i2')
-    elif(type_string == 'I'): return np.dtype('i4')
-    elif(type_string == 'L'): return np.dtype('i8')
-    elif(type_string == 'F'): return np.dtype('f4')
-    elif(type_string == 'D'): return np.dtype('f8')
-    else: raise ValueError('Input not understood.')
-
-        
+   
